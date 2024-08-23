@@ -132,6 +132,18 @@ the executable."
           (message "Compilation of `emacs-libvterm' module succeeded")
         (error "Compilation of `emacs-libvterm' module failed!")))))
 
+(defun is-ms-windows()
+  (string= system-type "windows-nt"))
+
+(defun vterm-get-vterm-directory()
+  (file-name-directory (locate-library "vterm.el" t)))
+
+(when (is-ms-windows)
+  (let* ((vterm-dir (vterm-get-vterm-directory))
+         (w32-bin-path (format "%sbin/w32" vterm-dir)))
+    (add-to-list 'load-path w32-bin-path)
+    (add-to-list 'exec-path w32-bin-path)))
+
 ;; If the vterm-module is not compiled yet, compile it
 (unless (require 'vterm-module nil t)
   (if (or vterm-always-compile-module
@@ -170,6 +182,19 @@ the executable."
 (defcustom vterm-shell shell-file-name
   "The shell that gets run in the vterm."
   :type 'string
+  :group 'vterm)
+
+(defcustom vterm-w32-pty-proxy "w32ptyproxy.exe"
+  "The ms windows program to connect emacs and windows shell with
+conpty enabled"
+  :type 'string
+  :group 'vterm)
+
+(defcustom vterm-w32-shell "powershell.exe"
+  "The ms windows shell that gets run in the vterm. e.g., cmd.exe,
+powershell.exe, pwsh.exe, ubuntu.exe(wsl)"
+  :type 'string
+  :options `("cmd" "powershell" "pwsh" "ubuntu")
   :group 'vterm)
 
 (defcustom vterm-tramp-shells '(("docker" "/bin/sh"))
@@ -751,6 +776,7 @@ Exceptions are defined by `vterm-keymap-exceptions'."
         (inhibit-eol-conversion nil)
         (coding-system-for-read 'binary)
         (process-adaptive-read-buffering nil)
+        process-cmd connection-type process-coding
         (width (max (- (window-max-chars-per-line) (vterm--get-margin-width))
                     vterm-min-window-width)))
     (setq vterm--term (vterm--new (window-body-height)
@@ -774,28 +800,41 @@ Exceptions are defined by `vterm-keymap-exceptions'."
     (add-function :filter-return
                   (local 'filter-buffer-substring-function)
                   #'vterm--filter-buffer-substring)
+
+    (if (is-ms-windows)
+        (setq connection-type 'pipe
+              process-coding 'utf-8-unix
+              process-cmd
+              (list vterm-w32-pty-proxy vterm-w32-shell
+                    (number-to-string width)
+                    (number-to-string (window-body-height))))
+      (setq connection-type 'pty
+            process-coding 'no-conversion
+            process-cmd
+            `("/bin/sh" "-c"
+              ,(format
+                "stty -nl sane %s erase ^? rows %d columns %d >/dev/null && exec %s"
+                ;; Some stty implementations (i.e. that of *BSD) do not
+                ;; support the iutf8 option.  to handle that, we run some
+                ;; heuristics to work out if the system supports that
+                ;; option and set the arg string accordingly. This is a
+                ;; gross hack but FreeBSD doesn't seem to want to fix it.
+                ;;
+                ;; See: https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=220009
+                (if (eq system-type 'berkeley-unix) "" "iutf8")
+                (window-body-height)
+                width (vterm--get-shell)))))
+
     (setq vterm--process
           (make-process
            :name "vterm"
            :buffer (current-buffer)
-           :command
-           `("/bin/sh" "-c"
-             ,(format
-               "stty -nl sane %s erase ^? rows %d columns %d >/dev/null && exec %s"
-               ;; Some stty implementations (i.e. that of *BSD) do not
-               ;; support the iutf8 option.  to handle that, we run some
-               ;; heuristics to work out if the system supports that
-               ;; option and set the arg string accordingly. This is a
-               ;; gross hack but FreeBSD doesn't seem to want to fix it.
-               ;;
-               ;; See: https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=220009
-               (if (eq system-type 'berkeley-unix) "" "iutf8")
-               (window-body-height)
-               width (vterm--get-shell)))
+           :command process-cmd
            ;; :coding 'no-conversion
-           :connection-type 'pty
+           :coding process-coding
+           :connection-type connection-type
            :file-handler t
-           :filter #'vterm--filter
+           :filter #'vterm--filter-simple
            ;; The sentinel is needed if there are exit functions or if
            ;; vterm-kill-buffer-on-exit is set to t.  In this latter case,
            ;; vterm--sentinel will kill the buffer
@@ -1237,6 +1276,16 @@ The return value is `t' when point moved successfully."
                     (< (point) pos)))
         (>= (point) pos))))))
 
+(defun vterm-with-w32shell(w32shell name)
+  "Start vterm with selected w32shell and buffer name."
+  (interactive
+   (list
+    (completing-read
+     "w32shell: " '("cmd" "powershell" "pwsh" "ubuntu") nil nil)
+    (read-string "name: " nil nil "*vterm*")))
+  (let ((vterm-w32-shell w32shell))
+    (vterm name)))
+
 ;;; Internal
 
 (defun vterm--forward-char ()
@@ -1536,6 +1585,18 @@ Then triggers a redraw from the module."
             (setq i ctl-end)))
         (vterm--update vterm--term)))))
 
+(defun vterm--filter-simple (process input)
+  "I/O Event.  Feeds PROCESS's INPUT to the virtual terminal.
+Then triggers a redraw from the module."
+  (let ((inhibit-redisplay t)
+        (inhibit-eol-conversion t)
+        (inhibit-read-only t)
+        (buf (process-buffer process)))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (ignore-errors (vterm--write-input vterm--term input))
+        (vterm--update vterm--term)))))
+
 (defun vterm--sentinel (process event)
   "Sentinel of vterm PROCESS.
 Argument EVENT process event."
@@ -1582,6 +1643,9 @@ Argument EVENT process event."
                  (> width 0)
                  (> height 0))
         (vterm--set-size vterm--term height width)
+        (when (is-ms-windows)
+          (process-send-string
+           vterm--process (format "\e[8;%d;%dt" height width)))
         (cons width height)))))
 
 (defun vterm--get-margin-width ()

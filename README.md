@@ -1,5 +1,8 @@
 [![MELPA](https://melpa.org/packages/vterm-badge.svg)](https://melpa.org/#/vterm)
 
+I forked this repo to add ms windows support. Now vterm is able to run
+in MS Windows native system (not WSL).
+
 # Introduction
 
 Emacs-libvterm (_vterm_) is fully-fledged terminal emulator inside GNU Emacs
