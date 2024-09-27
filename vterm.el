@@ -166,6 +166,9 @@ the executable."
 (declare-function vterm--get-pwd-raw "vterm-module")
 (declare-function vterm--reset-point "vterm-module")
 (declare-function vterm--get-icrnl "vterm-module")
+;; TODO: brianjcj
+(declare-function vterm--mouse-move "vterm-module")
+(declare-function vterm--mouse-button "vterm-module")
 
 (require 'subr-x)
 (require 'find-func)
@@ -583,6 +586,11 @@ Only background is used."
 (defvar-local vterm--process nil
   "Shell process of current term.")
 
+(when (is-ms-windows)
+(defvar-local vterm--win32-pipe-name nil
+  "Name of pipe.")
+  )
+
 (defvar-local vterm--redraw-timer nil)
 (defvar-local vterm--redraw-immididately nil)
 (defvar-local vterm--linenum-remapping nil)
@@ -749,6 +757,25 @@ Exceptions are defined by `vterm-keymap-exceptions'."
     map))
 
 
+(defun vterm-random-alnum ()
+  (let* ((alnum "abcdefghijklmnopqrstuvwxyz0123456789")
+         (i (% (abs (random)) (length alnum))))
+    (substring alnum i (1+ i))))
+
+(defun vterm-random-string (len)
+  (let ((cs (list)))
+    (dotimes (_ len)
+      (push (vterm-random-alnum) cs))
+    (apply 'concat cs)))
+
+(defun vterm-random-pipe-name ()
+  (concat "\\\\.\\pipe\\vterm-name-pipe-"
+          (number-to-string (emacs-pid))
+          "-"
+          (vterm-random-string 5)
+          "-"
+          (number-to-string (car (current-cpu-time)))))
+
 ;;; Mode
 
 (define-derived-mode vterm-mode fundamental-mode "VTerm"
@@ -779,13 +806,16 @@ Exceptions are defined by `vterm-keymap-exceptions'."
         process-cmd connection-type process-coding
         (width (max (- (window-max-chars-per-line) (vterm--get-margin-width))
                     vterm-min-window-width)))
+    (when (is-ms-windows)
+      (setq vterm--win32-pipe-name (vterm-random-pipe-name)))
     (setq vterm--term (vterm--new (window-body-height)
                                   width vterm-max-scrollback
                                   vterm-disable-bold-font
                                   vterm-disable-underline
                                   vterm-disable-inverse-video
                                   vterm-ignore-blink-cursor
-                                  vterm-set-bold-hightbright))
+                                  vterm-set-bold-hightbright
+                                  vterm--win32-pipe-name))
     (setq buffer-read-only t)
     (setq-local scroll-conservatively 101)
     (setq-local scroll-margin 0)
@@ -802,12 +832,14 @@ Exceptions are defined by `vterm-keymap-exceptions'."
                   #'vterm--filter-buffer-substring)
 
     (if (is-ms-windows)
-        (setq connection-type 'pipe
-              process-coding 'utf-8-unix
-              process-cmd
-              (list vterm-w32-pty-proxy vterm-w32-shell
-                    (number-to-string width)
-                    (number-to-string (window-body-height))))
+        (progn
+          (setq connection-type 'pipe
+                process-coding 'utf-8-unix
+                process-cmd
+                (list vterm-w32-pty-proxy vterm-w32-shell
+                      (number-to-string (window-body-height))
+                      (number-to-string width)
+                      vterm--win32-pipe-name)))
       (setq connection-type 'pty
             process-coding 'no-conversion
             process-cmd
@@ -1206,11 +1238,12 @@ But when clicking to the unused area below the last prompt,
 move the cursor to the prompt area."
   (interactive "e\np")
   (let ((pt (mouse-set-point event promote-to-region)))
-    (if (= (count-words pt (point-max)) 0)
+    (if (and pt (= (count-words pt (point-max)) 0))
         (vterm-reset-cursor-point)
       pt))
   ;; Otherwise it selects text for every other click
-  (keyboard-quit))
+  ;; (keyboard-quit)  ; TODO: brianjcj ?
+  )
 
 (defun vterm-send-string (string &optional paste-p)
   "Send the string STRING to vterm.
@@ -1281,7 +1314,7 @@ The return value is `t' when point moved successfully."
   (interactive
    (list
     (completing-read
-     "w32shell: " '("cmd" "powershell" "pwsh" "ubuntu") nil nil)
+     "w32shell: " '("cmd" "powershell" "pwsh" "ubuntu" "wsl") nil nil)
     (read-string "name: " nil nil "*vterm*")))
   (let ((vterm-w32-shell w32shell))
     (vterm name)))
@@ -1643,9 +1676,11 @@ Argument EVENT process event."
                  (> width 0)
                  (> height 0))
         (vterm--set-size vterm--term height width)
-        (when (is-ms-windows)
-          (process-send-string
-           vterm--process (format "\e[8;%d;%dt" height width)))
+
+        ;; (when (is-ms-windows)
+        ;;  (process-send-string
+        ;;   vterm--process (format "\e[8;%d;%dt" height width)))
+
         (cons width height)))))
 
 (defun vterm--get-margin-width ()

@@ -6,6 +6,10 @@
 #include <stdbool.h>
 #include <vterm.h>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 // https://gcc.gnu.org/wiki/Visibility
 #if defined _WIN32 || defined __CYGWIN__
 #ifdef __GNUC__
@@ -122,6 +126,12 @@ typedef struct Term {
   char *cmd_buffer;
 
   int pty_fd;
+
+  #ifdef _WIN32
+  HANDLE name_pipe_handle;
+  wchar_t *win32_pipe_name;
+  #endif
+
 } Term;
 
 static bool compare_cells(VTermScreenCell *a, VTermScreenCell *b);
@@ -142,6 +152,10 @@ static void term_process_key(Term *term, emacs_env *env, unsigned char *key,
 static void invalidate_terminal(Term *term, int start_row, int end_row);
 
 void term_finalize(void *object);
+
+#ifdef _WIN32
+static void term_set_conpty_size(Term *term, short rows, short cols);
+#endif
 
 emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
                        void *data);
@@ -165,6 +179,13 @@ emacs_value Fvterm_get_prompt_point(emacs_env *env, ptrdiff_t nargs,
                                     emacs_value args[], void *data);
 emacs_value Fvterm_reset_cursor_point(emacs_env *env, ptrdiff_t nargs,
                                       emacs_value args[], void *data);
+
+/* TODO: brianjcj */
+emacs_value Fvterm_mouse_move(emacs_env *env, ptrdiff_t nargs,
+                              emacs_value args[], void *data);
+
+emacs_value Fvterm_mouse_button(emacs_env *env, ptrdiff_t nargs,
+                                emacs_value args[], void *data);
 
 VTERM_EXPORT int emacs_module_init(struct emacs_runtime *ert);
 

@@ -67,7 +67,10 @@
     (define-key map [remap xterm-paste]         #'vterm-xterm-paste)
     (define-key map [remap yank-pop]            #'vterm-yank-pop)
     (define-key map [remap mouse-yank-primary]  #'vterm-yank-primary)
-    (define-key map [mouse-1]                   #'vterm-mouse-set-point)
+    (define-key map [down-mouse-1]              #'vterm-immersion-mouse-down)
+    (define-key map [down-mouse-3]              #'vterm-immersion-mouse-down)
+    (define-key map [wheel-up]                  #'vterm-immersion-mwheel-scroll)
+    (define-key map [wheel-down]                #'vterm-immersion-mwheel-scroll)
     (define-key map (kbd "C-SPC")               #'vterm--self-insert)
     (define-key map (kbd "S-SPC")               #'vterm-send-space)
     (define-key map (kbd "C-_")                 #'vterm--self-insert)
@@ -127,10 +130,66 @@ mode or just execute some local emacs command). e.g,
   (setq vterm-immersion-go-when-copy-mode-off t)
   (vterm-copy-mode))
 
+;; TODO: find a better name
 (defun vterm-read-and-send-command(cmd)
   (interactive "scmd: ")
   (message cmd)
   (vterm-insert cmd))
+
+;; mouse support
+(defun vterm-immersion-mwheel-scroll (event &optional arg)
+  "mouse whell"
+  (interactive (list last-input-event current-prefix-arg))
+  (let ((button (mwheel-event-button event))
+        (button-no 4))
+    (pcase button
+      ('wheel-up (setq button-no 4))
+      ('wheel-down (setq button-no 5)))
+    (let ((pos (posn-col-row (event-end event))))
+      (vterm--mouse-move vterm--term (cdr pos) (car pos) 0)
+      (vterm--mouse-button vterm--term button-no t 0)
+      )))
+
+(defun vterm-get-mouse-num (event)
+  (pcase event
+    ((or (and (let mouse-type (event-basic-type event))
+              (let (rx string-start "mouse-"
+                       (let key-num (one-or-more
+                                     (any (?0 . ?9))))
+                       string-end)
+                (symbol-name mouse-type))
+              (let (and (pred (<= 1))
+                        (pred (>= 11))
+                        mouse-num)
+                (string-to-number key-num)))
+         (and (let 'wheel-up (event-basic-type mouse))
+              (let mouse-num 4))
+         (and (let 'wheel-down (event-basic-type mouse))
+              (let mouse-num 5))
+         (and (let 'wheel-right (event-basic-type mouse))
+              (let mouse-num 6))
+         (and (let 'wheel-left (event-basic-type mouse))
+              (let mouse-num 7)))
+     mouse-num)
+    (t 1)))
+
+(defun vterm-immersion-mouse-down (event &optional promote-to-region)
+  ""
+  (interactive "e\np")
+  ;; (print (event-basic-type event))
+  (let ((pos (posn-col-row (event-end event)))
+        (mouse-num (vterm-get-mouse-num event))
+        ev)
+    (vterm--mouse-move vterm--term (cdr pos) (car pos) 0)
+    (vterm--mouse-button vterm--term mouse-num t 0)
+    (track-mouse
+      (while
+          (progn
+            (setq ev (read--potential-mouse-event))
+            (mouse-movement-p ev))
+        (let ((pos (posn-col-row (event-end ev))))
+          (vterm--mouse-move vterm--term (cdr pos) (car pos) 0))))
+    (vterm--mouse-button vterm--term mouse-num nil 0)))
 
 (defun vterm-immersion-default-setup()
   ;; (define-key vterm-immersion-mode-map (kbd "<f12>") #'switch-to-buffer)
@@ -158,8 +217,10 @@ mode or just execute some local emacs command). e.g,
 
   (define-key vterm-mode-map (kbd "M-?") #'vterm-read-and-send-command)
   (define-key vterm-immersion-mode-map (kbd "M-?") #'vterm-read-and-send-command)
+
+  (define-key vterm-mode-map (kbd "M-:") #'eval-expression)
   )
 
 (provide 'vterm-immersion)
 
-;;; vterm.el ends here
+;;; vterm-immersion.el ends here

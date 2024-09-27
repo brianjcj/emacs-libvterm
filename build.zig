@@ -5,6 +5,9 @@ const libvterm_files = .{ "encoding.c", "keyboard.c", "mouse.c", "parser.c", "pe
 const libvterm_dir = "libs/libvterm-0.3.3/";
 // const libvterm_dir = "libs/libvterm-mirror/";
 
+const liblogc_dir = "libs/log.c/src/";
+const liblogc_files = .{"log.c"};
+
 const vterm_module_files = .{ "vterm-module.c", "utf8.c", "elisp.c" };
 
 fn buildexe(b: *std.Build, name: []const u8, source_file: []const u8, libvterm: *std.Build.Step.Compile) void {
@@ -28,7 +31,9 @@ pub fn build(b: *std.Build) void {
         .version = .{ .major = 1, .minor = 2, .patch = 3 },
     });
     libvterm.addCSourceFiles(.{ .files = &libvterm_files, .root = b.path(libvterm_dir ++ "src"), .flags = &cflags });
+    libvterm.addCSourceFiles(.{ .files = &liblogc_files, .root = b.path(liblogc_dir), .flags = &cflags });
     libvterm.addIncludePath(b.path(libvterm_dir ++ "include"));
+    libvterm.addIncludePath(b.path(liblogc_dir));
     libvterm.linkLibC();
     b.installArtifact(libvterm);
 
@@ -47,5 +52,6 @@ pub fn build(b: *std.Build) void {
     libvterm_module.addCSourceFiles(.{ .files = &vterm_module_files, .root = b.path("."), .flags = &cflags });
     libvterm_module.addIncludePath(b.path(libvterm_dir ++ "include"));
     libvterm_module.addIncludePath(b.path("."));
+    libvterm_module.addIncludePath(b.path(liblogc_dir));
     b.installArtifact(libvterm_module);
 }

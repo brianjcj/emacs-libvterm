@@ -4,12 +4,14 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #ifndef _WIN32
 #include <termios.h>
-#endif
 #include <unistd.h>
+#endif
+#include <log.h>
 #include <vterm.h>
 
 static LineInfo *alloc_lineinfo() {
@@ -751,6 +753,9 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *user_data) {
   case VTERM_PROP_ALTSCREEN:
     invalidate_terminal(term, 0, term->height);
     break;
+  case VTERM_PROP_MOUSE:
+    /* TODO */
+    break;
   default:
     return 0;
   }
@@ -884,7 +889,11 @@ static emacs_value cell_rgb_color(emacs_env *env, Term *term,
 static void term_flush_output(Term *term, emacs_env *env) {
   size_t len = vterm_output_get_buffer_current(term->vt);
   if (len) {
+#ifdef _MSC_VER
+    char *buffer = _alloca(len);
+#else
     char buffer[len];
+#endif
     len = vterm_output_read(term->vt, buffer, len);
 
     emacs_value output = env->make_string(env, buffer, len);
@@ -1068,6 +1077,62 @@ void term_finalize(void *object) {
   free(term->lines);
   vterm_free(term->vt);
   free(term);
+}
+
+static void term_set_conpty_size(Term *term, short rows, short cols) {
+  log_info("send pipe: rows: %d, cols: %d, pipe:%s", rows, cols,
+           term->win32_pipe_name);
+
+  HANDLE hPipe;
+  DWORD dwWritten;
+
+  if (term->name_pipe_handle == NULL) {
+    hPipe = CreateFileW(term->win32_pipe_name, GENERIC_WRITE, 0, NULL,
+                        OPEN_EXISTING, 0, NULL);
+    term->name_pipe_handle = hPipe;
+  } else {
+    hPipe = term->name_pipe_handle;
+  }
+
+  if (hPipe != INVALID_HANDLE_VALUE) {
+    char buf[5];
+
+    buf[0] = 1; // msg type
+
+    short *ps = (short *)(buf + 1);
+    *ps = rows;
+
+    ++ps;
+    *ps = cols;
+
+    log_info("send pipe: rows: %d, cols: %d", rows, cols);
+
+    BOOL boo = WriteFile(hPipe, buf, 5, &dwWritten, NULL);
+
+    if (!boo) {
+      char buf[256];
+      DWORD en = GetLastError();
+      FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                     NULL, en, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf,
+                     (sizeof(buf) / sizeof(char)), NULL);
+
+      log_info("failed to write to pipe. error: %d, %s", en, buf);
+    } else {
+      log_info("ok done write to piep");
+    }
+
+    // DisconnectNamedPipe(hPipe);
+    // CloseHandle(hPipe);
+
+  } else {
+    char buf[256];
+    DWORD en = GetLastError();
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, en, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf,
+                   (sizeof(buf) / sizeof(char)), NULL);
+
+    log_info("failed to open pipe. error: %d, %s", en, buf);
+  }
 }
 
 static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
@@ -1307,6 +1372,26 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
     term->lines[i] = NULL;
   }
 
+#ifdef _WIN32
+  term->name_pipe_handle = NULL;
+
+  ptrdiff_t len = string_bytes(env, args[8]);
+
+  if (len > 0) {
+    char *bytes = _alloca(len);
+    env->copy_string_contents(env, args[8], bytes, &len);
+    log_info("pipe name: %s", bytes);
+
+    wchar_t *out = malloc(len * 4);
+
+    mbstowcs(out, bytes, len); // TODO: free it when...
+
+    term->win32_pipe_name = out;
+    // log_info("pipe name: %s", bytes);
+  }
+
+#endif
+
   return env->make_user_ptr(env, term_finalize, term);
 }
 
@@ -1317,7 +1402,11 @@ emacs_value Fvterm_update(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
   // Process keys
   if (nargs > 1) {
     ptrdiff_t len = string_bytes(env, args[1]);
+#ifdef _MSC_VER
+    unsigned char *key = _alloca(len);
+#else
     unsigned char key[len];
+#endif
     env->copy_string_contents(env, args[1], (char *)key, &len);
     VTermModifier modifier = VTERM_MOD_NONE;
     if (nargs > 2 && env->is_not_nil(env, args[2]))
@@ -1353,7 +1442,12 @@ emacs_value Fvterm_write_input(emacs_env *env, ptrdiff_t nargs,
   ptrdiff_t len = string_bytes(env, args[1]);
 
   if (len > 0) {
+#ifdef _MSC_VER
+    char *bytes = _alloca(len);
+#else
     char bytes[len];
+#endif
+
     env->copy_string_contents(env, args[1], bytes, &len);
 
     vterm_input_write(term->vt, bytes, len);
@@ -1376,9 +1470,12 @@ emacs_value Fvterm_set_size(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
         term->linenum_added = rows - term->height - term->sb_current;
       }
     }
+
     term->resizing = true;
     vterm_set_size(term->vt, rows, cols);
     vterm_screen_flush_damage(term->vts);
+
+    term_set_conpty_size(term, rows, cols);
 
     term_redraw(term, env);
   }
@@ -1437,6 +1534,57 @@ emacs_value Fvterm_reset_cursor_point(emacs_env *env, ptrdiff_t nargs,
   goto_line(env, line);
   goto_col(term, env, term->cursor.row, term->cursor.col);
   return point(env);
+}
+
+/* TODO: brianjcj */
+emacs_value Fvterm_mouse_move(emacs_env *env, ptrdiff_t nargs,
+                              emacs_value args[], void *data) {
+  Term *term = env->get_user_ptr(env, args[0]);
+  int row = env->extract_integer(env, args[1]);
+  int col = env->extract_integer(env, args[2]);
+  int mod = env->extract_integer(env, args[3]);
+
+  /* /\* TODO: brianjcj temp *\/ */
+  /* VTermValue val = { .number = 7 }; */
+  /* VTermState *state = vterm_obtain_state(term->vt); */
+  /* vterm_state_set_termprop(state, VTERM_PROP_MOUSE, &val); */
+
+  vterm_mouse_move(term->vt, row, col, mod);
+
+  // Flush output
+  term_flush_output(term, env);
+  if (term->is_invalidated) {
+    vterm_invalidate(env);
+  }
+
+  return Qnil;
+}
+
+emacs_value Fvterm_mouse_button(emacs_env *env, ptrdiff_t nargs,
+                                emacs_value args[], void *data) {
+  Term *term = env->get_user_ptr(env, args[0]);
+  int button = env->extract_integer(env, args[1]);
+  bool pressed = env->is_not_nil(env, args[2]);
+  int mod = env->extract_integer(env, args[3]);
+
+  /* /\* TODO: brianjcj temp *\/ */
+  /* VTermValue val = { .number = 7 }; */
+  /* VTermState *state = vterm_obtain_state(term->vt); */
+  /* vterm_state_set_termprop(state, VTERM_PROP_MOUSE, &val); */
+
+  vterm_mouse_button(term->vt, button, pressed, mod);
+
+  size_t len = vterm_output_get_buffer_current(term->vt);
+
+  log_debug("mouse button: button:%d, mod:%d, output_len:%d", button, mod, len);
+
+  // Flush output
+  term_flush_output(term, env);
+  if (term->is_invalidated) {
+    vterm_invalidate(env);
+  }
+
+  return Qnil;
 }
 
 int emacs_module_init(struct emacs_runtime *ert) {
@@ -1521,7 +1669,7 @@ int emacs_module_init(struct emacs_runtime *ert) {
   // Exported functions
   emacs_value fun;
   fun =
-      env->make_function(env, 4, 8, Fvterm_new, "Allocate a new vterm.", NULL);
+      env->make_function(env, 4, 9, Fvterm_new, "Allocate a new vterm.", NULL);
   bind_function(env, "vterm--new", fun);
 
   fun = env->make_function(env, 1, 5, Fvterm_update,
@@ -1554,7 +1702,19 @@ int emacs_module_init(struct emacs_runtime *ert) {
                            "Get the icrnl state of the pty", NULL);
   bind_function(env, "vterm--get-icrnl", fun);
 
+  /* TODO: brianjcj */
+  fun = env->make_function(env, 4, 4, Fvterm_mouse_move,
+                           "send mouse move event", NULL);
+  bind_function(env, "vterm--mouse-move", fun);
+
+  fun = env->make_function(env, 4, 4, Fvterm_mouse_button,
+                           "send mouse button event", NULL);
+  bind_function(env, "vterm--mouse-button", fun);
+
   provide(env, "vterm-module");
+
+  FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a");
+  log_add_fp(fp, LOG_TRACE);
 
   return 0;
 }
