@@ -751,10 +751,11 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *user_data) {
 #endif
     break;
   case VTERM_PROP_ALTSCREEN:
+    term->on_altscreen = val->boolean;
+    log_info("on_altscreen: %d", val->boolean);
     invalidate_terminal(term, 0, term->height);
     break;
   case VTERM_PROP_MOUSE:
-    /* TODO */
     break;
   default:
     return 0;
@@ -1076,6 +1077,11 @@ void term_finalize(void *object) {
   free(term->sb_buffer);
   free(term->lines);
   vterm_free(term->vt);
+
+  if (term->win32_pipe_name) {
+    free(term->win32_pipe_name);
+  }
+
   free(term);
 }
 
@@ -1118,7 +1124,7 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
 
       log_info("failed to write to pipe. error: %d, %s", en, buf);
     } else {
-      log_info("ok done write to piep");
+      log_info("ok done write to pipe");
     }
 
     // DisconnectNamedPipe(hPipe);
@@ -1384,10 +1390,9 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
 
     wchar_t *out = malloc(len * 4);
 
-    mbstowcs(out, bytes, len); // TODO: free it when...
+    mbstowcs(out, bytes, len); // free it when finalize
 
     term->win32_pipe_name = out;
-    // log_info("pipe name: %s", bytes);
   }
 
 #endif
@@ -1536,18 +1541,12 @@ emacs_value Fvterm_reset_cursor_point(emacs_env *env, ptrdiff_t nargs,
   return point(env);
 }
 
-/* TODO: brianjcj */
 emacs_value Fvterm_mouse_move(emacs_env *env, ptrdiff_t nargs,
                               emacs_value args[], void *data) {
   Term *term = env->get_user_ptr(env, args[0]);
   int row = env->extract_integer(env, args[1]);
   int col = env->extract_integer(env, args[2]);
   int mod = env->extract_integer(env, args[3]);
-
-  /* /\* TODO: brianjcj temp *\/ */
-  /* VTermValue val = { .number = 7 }; */
-  /* VTermState *state = vterm_obtain_state(term->vt); */
-  /* vterm_state_set_termprop(state, VTERM_PROP_MOUSE, &val); */
 
   vterm_mouse_move(term->vt, row, col, mod);
 
@@ -1567,16 +1566,7 @@ emacs_value Fvterm_mouse_button(emacs_env *env, ptrdiff_t nargs,
   bool pressed = env->is_not_nil(env, args[2]);
   int mod = env->extract_integer(env, args[3]);
 
-  /* /\* TODO: brianjcj temp *\/ */
-  /* VTermValue val = { .number = 7 }; */
-  /* VTermState *state = vterm_obtain_state(term->vt); */
-  /* vterm_state_set_termprop(state, VTERM_PROP_MOUSE, &val); */
-
   vterm_mouse_button(term->vt, button, pressed, mod);
-
-  size_t len = vterm_output_get_buffer_current(term->vt);
-
-  log_debug("mouse button: button:%d, mod:%d, output_len:%d", button, mod, len);
 
   // Flush output
   term_flush_output(term, env);
@@ -1585,6 +1575,13 @@ emacs_value Fvterm_mouse_button(emacs_env *env, ptrdiff_t nargs,
   }
 
   return Qnil;
+}
+
+emacs_value Fvterm_get_on_altscreen(emacs_env *env, ptrdiff_t nargs,
+                                    emacs_value args[], void *data) {
+  Term *term = env->get_user_ptr(env, args[0]);
+
+  return term->on_altscreen == 0 ? Qnil : Qt;
 }
 
 int emacs_module_init(struct emacs_runtime *ert) {
@@ -1702,7 +1699,6 @@ int emacs_module_init(struct emacs_runtime *ert) {
                            "Get the icrnl state of the pty", NULL);
   bind_function(env, "vterm--get-icrnl", fun);
 
-  /* TODO: brianjcj */
   fun = env->make_function(env, 4, 4, Fvterm_mouse_move,
                            "send mouse move event", NULL);
   bind_function(env, "vterm--mouse-move", fun);
@@ -1710,6 +1706,10 @@ int emacs_module_init(struct emacs_runtime *ert) {
   fun = env->make_function(env, 4, 4, Fvterm_mouse_button,
                            "send mouse button event", NULL);
   bind_function(env, "vterm--mouse-button", fun);
+
+  fun = env->make_function(env, 1, 1, Fvterm_get_on_altscreen,
+                           "get on altscreen boolean", NULL);
+  bind_function(env, "vterm--get-on-altscreen", fun);
 
   provide(env, "vterm-module");
 

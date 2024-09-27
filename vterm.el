@@ -166,9 +166,9 @@ the executable."
 (declare-function vterm--get-pwd-raw "vterm-module")
 (declare-function vterm--reset-point "vterm-module")
 (declare-function vterm--get-icrnl "vterm-module")
-;; TODO: brianjcj
 (declare-function vterm--mouse-move "vterm-module")
 (declare-function vterm--mouse-button "vterm-module")
+(declare-function vterm--get-on-altscreen "vterm-module")
 
 (require 'subr-x)
 (require 'find-func)

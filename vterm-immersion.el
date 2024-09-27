@@ -67,8 +67,8 @@
     (define-key map [remap xterm-paste]         #'vterm-xterm-paste)
     (define-key map [remap yank-pop]            #'vterm-yank-pop)
     (define-key map [remap mouse-yank-primary]  #'vterm-yank-primary)
-    (define-key map [down-mouse-1]              #'vterm-immersion-mouse-down)
-    (define-key map [down-mouse-3]              #'vterm-immersion-mouse-down)
+    (define-key map [down-mouse-1]              #'vterm-immersion-mouse-drag-region)
+    (define-key map [down-mouse-3]              #'vterm-immersion-mouse-down-3)
     (define-key map [wheel-up]                  #'vterm-immersion-mwheel-scroll)
     (define-key map [wheel-down]                #'vterm-immersion-mwheel-scroll)
     (define-key map (kbd "C-SPC")               #'vterm--self-insert)
@@ -140,6 +140,13 @@ mode or just execute some local emacs command). e.g,
 (defun vterm-immersion-mwheel-scroll (event &optional arg)
   "mouse whell"
   (interactive (list last-input-event current-prefix-arg))
+  (if (vterm--get-on-altscreen vterm--term)
+      (vterm-immersion-mwheel-scroll-on-altscreen event arg)
+    (mwheel-scroll event arg)))
+
+(defun vterm-immersion-mwheel-scroll-on-altscreen (event &optional arg)
+  "mouse whell"
+  (interactive (list last-input-event current-prefix-arg))
   (let ((button (mwheel-event-button event))
         (button-no 4))
     (pcase button
@@ -147,8 +154,7 @@ mode or just execute some local emacs command). e.g,
       ('wheel-down (setq button-no 5)))
     (let ((pos (posn-col-row (event-end event))))
       (vterm--mouse-move vterm--term (cdr pos) (car pos) 0)
-      (vterm--mouse-button vterm--term button-no t 0)
-      )))
+      (vterm--mouse-button vterm--term button-no t 0))))
 
 (defun vterm-get-mouse-num (event)
   (pcase event
@@ -173,9 +179,22 @@ mode or just execute some local emacs command). e.g,
      mouse-num)
     (t 1)))
 
-(defun vterm-immersion-mouse-down (event &optional promote-to-region)
+(defun vterm-immersion-mouse-drag-region (event)
   ""
-  (interactive "e\np")
+  (interactive "e")
+  (if (vterm--get-on-altscreen vterm--term)
+      (vterm-immersion-mouse-down-on-altscreen event)
+    (mouse-drag-region event)))
+
+(defun vterm-immersion-mouse-down-3 (event)
+  ""
+  (interactive "e")
+  (when (vterm--get-on-altscreen vterm--term)
+      (vterm-immersion-mouse-down-on-altscreen event)))
+
+(defun vterm-immersion-mouse-down-on-altscreen (event)
+  ""
+  (interactive "e")
   ;; (print (event-basic-type event))
   (let ((pos (posn-col-row (event-end event)))
         (mouse-num (vterm-get-mouse-num event))

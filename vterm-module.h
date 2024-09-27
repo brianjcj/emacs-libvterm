@@ -127,6 +127,8 @@ typedef struct Term {
 
   int pty_fd;
 
+  int on_altscreen;
+
   #ifdef _WIN32
   HANDLE name_pipe_handle;
   wchar_t *win32_pipe_name;
@@ -180,12 +182,14 @@ emacs_value Fvterm_get_prompt_point(emacs_env *env, ptrdiff_t nargs,
 emacs_value Fvterm_reset_cursor_point(emacs_env *env, ptrdiff_t nargs,
                                       emacs_value args[], void *data);
 
-/* TODO: brianjcj */
 emacs_value Fvterm_mouse_move(emacs_env *env, ptrdiff_t nargs,
                               emacs_value args[], void *data);
 
 emacs_value Fvterm_mouse_button(emacs_env *env, ptrdiff_t nargs,
                                 emacs_value args[], void *data);
+
+emacs_value Fvterm_get_on_altscreen(emacs_env *env, ptrdiff_t nargs,
+                                    emacs_value args[], void *data);
 
 VTERM_EXPORT int emacs_module_init(struct emacs_runtime *ert);
 
