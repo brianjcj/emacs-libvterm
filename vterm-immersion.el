@@ -24,6 +24,12 @@
 
 ;;; Immersion Mode
 
+(defcustom vterm-auto-immension-mode t
+  "when is not nil, turn on vterm-auto-immension-mode automatically
+after entering alt-screen, and turn off after leaving alt-screen."
+  :type  'boolean
+  :group 'vterm)
+
 (defvar vterm-immersion-mode-map
   (let ((map (make-sparse-keymap))
         (vterm-keymap-exceptions '()))
@@ -209,6 +215,12 @@ mode or just execute some local emacs command). e.g,
         (let ((pos (posn-col-row (event-end ev))))
           (vterm--mouse-move vterm--term (cdr pos) (car pos) 0))))
     (vterm--mouse-button vterm--term mouse-num nil 0)))
+
+(defun vterm-immersion-on-altscreen-change (on-altscreen)
+  (when vterm-auto-immension-mode
+    (vterm-immersion-mode (if on-altscreen 1 -1))))
+
+(add-hook 'vterm-on-altscreen-changed-hook 'vterm-immersion-on-altscreen-change)
 
 (defun vterm-immersion-default-setup()
   ;; (define-key vterm-immersion-mode-map (kbd "<f12>") #'switch-to-buffer)

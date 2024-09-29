@@ -1372,6 +1372,8 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
 
   term->cmd_buffer = NULL;
 
+  term->on_altscreen = 0;
+
   term->lines = malloc(sizeof(LineInfo *) * rows);
   term->lines_len = rows;
   for (int i = 0; i < rows; i++) {
@@ -1713,8 +1715,8 @@ int emacs_module_init(struct emacs_runtime *ert) {
 
   provide(env, "vterm-module");
 
-  FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a");
-  log_add_fp(fp, LOG_TRACE);
+  //FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a");
+  //log_add_fp(fp, LOG_TRACE);
 
   return 0;
 }

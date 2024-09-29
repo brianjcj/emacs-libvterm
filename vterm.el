@@ -588,8 +588,9 @@ Only background is used."
 
 (when (is-ms-windows)
 (defvar-local vterm--win32-pipe-name nil
-  "Name of pipe.")
-  )
+  "Name of pipe."))
+
+(defvar-local vterm--notified-on-altscreen nil)
 
 (defvar-local vterm--redraw-timer nil)
 (defvar-local vterm--redraw-immididately nil)
@@ -1314,7 +1315,7 @@ The return value is `t' when point moved successfully."
   (interactive
    (list
     (completing-read
-     "w32shell: " '("cmd" "powershell" "pwsh" "ubuntu" "wsl") nil nil)
+     "w32shell: " '("cmd" "powershell" "pwsh" "ubuntu" "wsl") nil nil nil nil "cmd")
     (read-string "name: " nil nil "*vterm*")))
   (let ((vterm-w32-shell w32shell))
     (vterm name)))
@@ -1628,6 +1629,11 @@ Then triggers a redraw from the module."
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (ignore-errors (vterm--write-input vterm--term input))
+        ;; check altscreen
+        (let ((on-altscreen (vterm--get-on-altscreen vterm--term)))
+          (when (not (eq on-altscreen vterm--notified-on-altscreen))
+            (setq vterm--notified-on-altscreen on-altscreen)
+            (run-hook-with-args 'vterm-on-altscreen-changed-hook on-altscreen)))
         (vterm--update vterm--term)))))
 
 (defun vterm--sentinel (process event)
