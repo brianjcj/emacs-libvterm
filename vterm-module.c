@@ -6,7 +6,9 @@
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 #ifndef _WIN32
 #include <termios.h>
 #include <unistd.h>
@@ -85,8 +87,9 @@ static int term_sb_push(int cols, const VTermScreenCell *cells, void *data) {
     if (lastline != NULL) {
       LineInfo *line = alloc_lineinfo();
       if (lastline->directory != NULL) {
-        line->directory = malloc(1 + strlen(lastline->directory));
-        strcpy(line->directory, lastline->directory);
+        size_t sz = 1 + strlen(lastline->directory);
+        line->directory = malloc(sz);
+        strcpy_s(line->directory, sz, lastline->directory);
       }
       term->lines[term->lines_len - 1] = line;
     }
@@ -438,10 +441,10 @@ static int term_resize(int rows, int cols, void *user_data) {
         if (lastline != NULL) {
           LineInfo *line = alloc_lineinfo();
           if (lastline->directory != NULL) {
-            line->directory =
-                malloc(1 + strlen(term->lines[term->lines_len - 1]->directory));
-            strcpy(line->directory,
-                   term->lines[term->lines_len - 1]->directory);
+            size_t sz = 1 + strlen(term->lines[term->lines_len - 1]->directory);
+            line->directory = malloc(sz);
+            strcpy_s(line->directory, sz,
+                     term->lines[term->lines_len - 1]->directory);
           }
           term->lines[i] = line;
         } else {
@@ -528,12 +531,12 @@ static void adjust_topline(Term *term, emacs_env *env) {
 
   emacs_value windows = get_buffer_window_list(env);
   emacs_value swindow = selected_window(env);
-  int winnum = env->extract_integer(env, length(env, windows));
+  int winnum = (int)env->extract_integer(env, length(env, windows));
   for (int i = 0; i < winnum; i++) {
     emacs_value window = nth(env, i, windows);
     if (eq(env, window, swindow)) {
       int win_body_height =
-          env->extract_integer(env, window_body_height(env, window));
+          (int)env->extract_integer(env, window_body_height(env, window));
 
       /* recenter:If ARG is negative, it counts up from the bottom of the
        * window.  (ARG should be less than the height of the window ) */
@@ -794,7 +797,7 @@ static emacs_value render_text(emacs_env *env, Term *term, char *buffer,
 
   // TODO: Blink, font, dwl, dhl is missing
   int emacs_major_version =
-      env->extract_integer(env, symbol_value(env, Qemacs_major_version));
+      (int)env->extract_integer(env, symbol_value(env, Qemacs_major_version));
   emacs_value properties;
   emacs_value props[64];
   int props_len = 0;
@@ -1070,9 +1073,11 @@ void term_finalize(void *object) {
     }
   }
 
+#ifndef _WIN32
   if (term->pty_fd > 0) {
     close(term->pty_fd);
   }
+#endif
 
   free(term->sb_buffer);
   free(term->lines);
@@ -1149,8 +1154,9 @@ static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
       free(term->directory);
       term->directory = NULL;
     }
-    term->directory = malloc(strlen(buffer) + 1);
-    strcpy(term->directory, buffer);
+    size_t sz = strlen(buffer) + 1;
+    term->directory = malloc(sz);
+    strcpy_s(term->directory, sz, buffer);
     term->directory_changed = true;
 
     for (int i = term->cursor.row; i < term->lines_len; i++) {
@@ -1161,8 +1167,9 @@ static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
       if (term->lines[i]->directory != NULL) {
         free(term->lines[i]->directory);
       }
-      term->lines[i]->directory = malloc(strlen(buffer) + 1);
-      strcpy(term->lines[i]->directory, buffer);
+      size_t sz = strlen(buffer) + 1;
+      term->lines[i]->directory = malloc(sz);
+      strcpy_s(term->lines[i]->directory, sz, buffer);
       if (i == term->cursor.row) {
         term->lines[i]->prompt_col = term->cursor.col;
       } else {
@@ -1175,8 +1182,9 @@ static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
     /* The elisp code is executed in term_redraw */
     ElispCodeListNode *node = malloc(sizeof(ElispCodeListNode));
     node->code_len = strlen(buffer);
-    node->code = malloc(node->code_len + 1);
-    strcpy(node->code, buffer);
+    size_t sz = node->code_len + 1;
+    node->code = malloc(sz);
+    strcpy_s(node->code, sz, buffer);
     node->next = NULL;
 
     *(term->elisp_code_p_insert) = node;
@@ -1300,9 +1308,9 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
                        void *data) {
   Term *term = malloc(sizeof(Term));
 
-  int rows = env->extract_integer(env, args[0]);
-  int cols = env->extract_integer(env, args[1]);
-  int sb_size = env->extract_integer(env, args[2]);
+  int rows = (int)env->extract_integer(env, args[0]);
+  int cols = (int)env->extract_integer(env, args[1]);
+  int sb_size = (int)env->extract_integer(env, args[2]);
   int disable_bold_font = env->is_not_nil(env, args[3]);
   int disable_underline = env->is_not_nil(env, args[4]);
   int disable_inverse_video = env->is_not_nil(env, args[5]);
@@ -1390,9 +1398,10 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
     env->copy_string_contents(env, args[8], bytes, &len);
     log_info("pipe name: %s", bytes);
 
-    wchar_t *out = malloc(len * 4);
+    wchar_t *out = malloc(len * sizeof(wchar_t));
 
-    mbstowcs(out, bytes, len); // free it when finalize
+    size_t sz;
+    mbstowcs_s(&sz, out, len, bytes, len); // free it when finalize
 
     term->win32_pipe_name = out;
   }
@@ -1467,14 +1476,14 @@ emacs_value Fvterm_write_input(emacs_env *env, ptrdiff_t nargs,
 emacs_value Fvterm_set_size(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
                             void *data) {
   Term *term = env->get_user_ptr(env, args[0]);
-  int rows = env->extract_integer(env, args[1]);
-  int cols = env->extract_integer(env, args[2]);
+  int rows = (int)env->extract_integer(env, args[1]);
+  int cols = (int)env->extract_integer(env, args[2]);
 
   if (cols != term->width || rows != term->height) {
     term->height_resize = rows - term->height;
     if (rows > term->height) {
       if (rows - term->height > term->sb_current) {
-        term->linenum_added = rows - term->height - term->sb_current;
+        term->linenum_added = (long)(rows - term->height - term->sb_current);
       }
     }
 
@@ -1509,7 +1518,7 @@ emacs_value Fvterm_set_pty_name(emacs_env *env, ptrdiff_t nargs,
 emacs_value Fvterm_get_pwd(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
                            void *data) {
   Term *term = env->get_user_ptr(env, args[0]);
-  int linenum = env->extract_integer(env, args[1]);
+  int linenum = (int)env->extract_integer(env, args[1]);
   int row = linenr_to_row(term, linenum);
   char *dir = get_row_directory(term, row);
 
@@ -1530,7 +1539,7 @@ emacs_value Fvterm_get_icrnl(emacs_env *env, ptrdiff_t nargs,
     else
       return Qnil;
   }
-#endif;
+#endif
   return Qnil;
 }
 
@@ -1546,9 +1555,9 @@ emacs_value Fvterm_reset_cursor_point(emacs_env *env, ptrdiff_t nargs,
 emacs_value Fvterm_mouse_move(emacs_env *env, ptrdiff_t nargs,
                               emacs_value args[], void *data) {
   Term *term = env->get_user_ptr(env, args[0]);
-  int row = env->extract_integer(env, args[1]);
-  int col = env->extract_integer(env, args[2]);
-  int mod = env->extract_integer(env, args[3]);
+  int row = (int)env->extract_integer(env, args[1]);
+  int col = (int)env->extract_integer(env, args[2]);
+  int mod = (int)env->extract_integer(env, args[3]);
 
   vterm_mouse_move(term->vt, row, col, mod);
 
@@ -1564,9 +1573,9 @@ emacs_value Fvterm_mouse_move(emacs_env *env, ptrdiff_t nargs,
 emacs_value Fvterm_mouse_button(emacs_env *env, ptrdiff_t nargs,
                                 emacs_value args[], void *data) {
   Term *term = env->get_user_ptr(env, args[0]);
-  int button = env->extract_integer(env, args[1]);
+  int button = (int)env->extract_integer(env, args[1]);
   bool pressed = env->is_not_nil(env, args[2]);
-  int mod = env->extract_integer(env, args[3]);
+  int mod = (int)env->extract_integer(env, args[3]);
 
   vterm_mouse_button(term->vt, button, pressed, mod);
 
