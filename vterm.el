@@ -169,6 +169,7 @@ the executable."
 (declare-function vterm--mouse-move "vterm-module")
 (declare-function vterm--mouse-button "vterm-module")
 (declare-function vterm--get-on-altscreen "vterm-module")
+(declare-function vterm--get-cell-info "vterm-module")
 
 (require 'subr-x)
 (require 'find-func)
@@ -579,6 +580,8 @@ Only background is used."
    vterm-color-bright-cyan
    vterm-color-bright-white]
   "Color palette for the foreground and background.")
+
+(defvar vterm-color-palette-current vterm-color-palette)
 
 (defvar-local vterm--term nil
   "Pointer to Term.")
@@ -1760,7 +1763,7 @@ If N is negative backward-line from end of buffer."
         (vterm--get-directory raw-pwd)))))
 
 (defun vterm--get-color (index &rest args)
-  "Get color by INDEX from `vterm-color-palette'.
+  "Get color by INDEX from `vterm-color-palette-current'.
 
 Special INDEX of -1 is used to represent default colors.  ARGS
 may optionally contain `:underline' or `:inverse-video' for cells
@@ -1773,7 +1776,7 @@ instead of background."
     (funcall (if foreground #'face-foreground #'face-background)
              (cond
               ((and (>= index 0) (< index 16))
-               (elt vterm-color-palette index))
+               (elt vterm-color-palette-current index))
               ((and (= index -1) foreground underline)
                'vterm-color-underline)
               ((and (= index -1) (not foreground) inverse-video)

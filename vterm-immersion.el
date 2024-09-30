@@ -18,6 +18,10 @@
 
 ;; (vterm-immersion-default-setup)
 
+;; You can enable vterm-auto-immension-mode too. When it is enabled,
+;; vterm-immersion mode will be activated after enter alternative screen (e.g.,
+;; enter emacs, vim) and deactivated after leaving alternative screen.
+
 ;;; Code:
 
 (require 'vterm)

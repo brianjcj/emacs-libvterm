@@ -1595,6 +1595,71 @@ emacs_value Fvterm_get_on_altscreen(emacs_env *env, ptrdiff_t nargs,
   return term->on_altscreen == 0 ? Qnil : Qt;
 }
 
+static emacs_value cell_rgb_color_debug(emacs_env *env, Term *term,
+                                        VTermScreenCell *cell, bool is_foreground) {
+  VTermColor *color = is_foreground ? &cell->fg : &cell->bg;
+
+  int props_len = 0;
+  emacs_value props[3];
+  if (is_foreground)
+    props[props_len++] = Qforeground;
+  if (cell->attrs.underline)
+    props[props_len++] = Qunderline;
+  if (cell->attrs.reverse)
+    props[props_len++] = Qreverse;
+
+  emacs_value args = list(env, props, props_len);
+
+  /** NOTE: -10 is used as index offset for special indexes,
+   * see C-h f vterm--get-color RET
+   */
+  if (VTERM_COLOR_IS_DEFAULT_FG(color) || VTERM_COLOR_IS_DEFAULT_BG(color)) {
+    log_info("color is default fg/bg");
+    return vterm_get_color(env, -1, args);
+  }
+  if (VTERM_COLOR_IS_INDEXED(color)) {
+    if (color->indexed.idx < 16) {
+      log_info("color idx: %d", color->indexed.idx);
+      return vterm_get_color(env, color->indexed.idx, args);
+    } else {
+      VTermState *state = vterm_obtain_state(term->vt);
+      vterm_state_get_palette_color(state, color->indexed.idx, color);
+      log_info("color idx in palette: %d, color:#%02X%02X%02X",
+               color->indexed.idx, color->rgb.red, color->rgb.green,
+               color->rgb.blue);
+    }
+  } else if (VTERM_COLOR_IS_RGB(color)) {
+    log_info("rgb color: #%02X%02X%02X", color->rgb.red, color->rgb.green,
+             color->rgb.blue);
+    /* do nothing just use the argument color directly */
+  }
+
+  char buffer[8];
+  snprintf(buffer, 8, "#%02X%02X%02X", color->rgb.red, color->rgb.green,
+           color->rgb.blue);
+  return env->make_string(env, buffer, 7);
+}
+
+emacs_value Fvterm_get_cell_info(emacs_env *env, ptrdiff_t nargs,
+                                 emacs_value args[], void *data) {
+  Term *term = env->get_user_ptr(env, args[0]);
+  int row = (int)env->extract_integer(env, args[1]);
+  int col = (int)env->extract_integer(env, args[2]);
+
+  VTermScreenCell cell;
+  fetch_cell(term, row, col, &cell);
+
+  log_info("cell: rows=%d, cols=%d", row, col);
+  log_info("fg----");
+  cell_rgb_color_debug(env, term, &cell, true);
+  log_info("bg----");
+  cell_rgb_color_debug(env, term, &cell, false);
+  log_info("text: %d(%c), len: %d", cell.chars[0], cell.chars[0], cell.width);
+
+  return Qnil;
+}
+
+
 int emacs_module_init(struct emacs_runtime *ert) {
   emacs_env *env = ert->get_environment(ert);
 
@@ -1722,10 +1787,14 @@ int emacs_module_init(struct emacs_runtime *ert) {
                            "get on altscreen boolean", NULL);
   bind_function(env, "vterm--get-on-altscreen", fun);
 
+  fun = env->make_function(env, 3, 3, Fvterm_get_cell_info,
+                           "get cell info", NULL);
+  bind_function(env, "vterm--get-cell-info", fun);
+
   provide(env, "vterm-module");
 
-  //FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a");
-  //log_add_fp(fp, LOG_TRACE);
+  /* FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a"); */
+  /* log_add_fp(fp, LOG_TRACE); */
 
   return 0;
 }
