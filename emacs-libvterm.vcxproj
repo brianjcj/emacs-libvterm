@@ -93,7 +93,7 @@
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
-      <AdditionalIncludeDirectories>C:\Users\JOYY\my-projects\emacs-libvterm\libs\libvterm-0.3.3\include;C:\Users\JOYY\my-projects\emacs-libvterm\libs\log.c\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\JOYY\my-projects\emacs-libvterm\libs\libvterm-mirror\include;C:\Users\JOYY\my-projects\emacs-libvterm\libs\log.c\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <RuntimeLibrary>
       </RuntimeLibrary>
@@ -119,7 +119,7 @@
     <ClCompile>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
-      <AdditionalIncludeDirectories>C:\Users\JOYY\my-projects\emacs-libvterm\libs\libvterm-0.3.3\include;C:\Users\JOYY\my-projects\emacs-libvterm\libs\log.c\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\JOYY\my-projects\emacs-libvterm\libs\libvterm-mirror\include;C:\Users\JOYY\my-projects\emacs-libvterm\libs\log.c\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <RuntimeLibrary>
       </RuntimeLibrary>
@@ -134,15 +134,15 @@
   <ItemGroup>
     <ClCompile Include="elisp.c" />
     <ClCompile Include="emacs-module.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\encoding.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\keyboard.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\mouse.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\parser.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\pen.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\screen.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\state.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\unicode.c" />
-    <ClCompile Include="libs\libvterm-0.3.3\src\vterm.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\encoding.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\keyboard.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\mouse.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\parser.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\pen.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\screen.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\state.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\unicode.c" />
+    <ClCompile Include="libs\libvterm-mirror\src\vterm.c" />
     <ClCompile Include="libs\log.c\src\log.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="utf8.c" />
@@ -152,20 +152,20 @@
   <ItemGroup>
     <ClInclude Include="elisp.h" />
     <ClInclude Include="emacs-module.h" />
-    <ClInclude Include="libs\libvterm-0.3.3\include\vterm.h" />
-    <ClInclude Include="libs\libvterm-0.3.3\include\vterm_keycodes.h" />
-    <ClInclude Include="libs\libvterm-0.3.3\src\rect.h" />
-    <ClInclude Include="libs\libvterm-0.3.3\src\utf8.h" />
-    <ClInclude Include="libs\libvterm-0.3.3\src\vterm_internal.h" />
+    <ClInclude Include="libs\libvterm-mirror\include\vterm.h" />
+    <ClInclude Include="libs\libvterm-mirror\include\vterm_keycodes.h" />
+    <ClInclude Include="libs\libvterm-mirror\src\rect.h" />
+    <ClInclude Include="libs\libvterm-mirror\src\utf8.h" />
+    <ClInclude Include="libs\libvterm-mirror\src\vterm_internal.h" />
     <ClInclude Include="libs\log.c\src\log.h" />
     <ClInclude Include="utf8.h" />
     <ClInclude Include="vterm-module-win32.h" />
     <ClInclude Include="vterm-module.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="libs\libvterm-0.3.3\src\encoding\DECdrawing.inc" />
-    <None Include="libs\libvterm-0.3.3\src\encoding\uk.inc" />
-    <None Include="libs\libvterm-0.3.3\src\fullwidth.inc" />
+    <None Include="libs\libvterm-mirror\src\encoding\DECdrawing.inc" />
+    <None Include="libs\libvterm-mirror\src\encoding\uk.inc" />
+    <None Include="libs\libvterm-mirror\src\fullwidth.inc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

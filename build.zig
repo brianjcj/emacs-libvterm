@@ -2,8 +2,8 @@ const std = @import("std");
 
 const cflags = .{ "-std=c99", "-Wall", "-Wpedantic", "-fPIC", "-O3" };
 const libvterm_files = .{ "encoding.c", "keyboard.c", "mouse.c", "parser.c", "pen.c", "screen.c", "state.c", "unicode.c", "vterm.c" };
-const libvterm_dir = "libs/libvterm-0.3.3/";
-// const libvterm_dir = "libs/libvterm-mirror/";
+// const libvterm_dir = "libs/libvterm-0.3.3/";
+const libvterm_dir = "libs/libvterm-mirror/";
 
 const liblogc_dir = "libs/log.c/src/";
 const liblogc_files = .{"log.c"};

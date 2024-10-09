@@ -82,7 +82,7 @@ emacs_value symbol_value(emacs_env *env, emacs_value symbol) {
 int string_bytes(emacs_env *env, emacs_value string) {
   ptrdiff_t size = 0;
   env->copy_string_contents(env, string, NULL, &size);
-  return size;
+  return (int)size;
 }
 
 emacs_value length(emacs_env *env, emacs_value string) {

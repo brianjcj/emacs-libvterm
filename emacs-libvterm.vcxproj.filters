@@ -27,31 +27,31 @@
     <ClCompile Include="vterm-module-win32.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\encoding.c">
+    <ClCompile Include="libs\libvterm-mirror\src\encoding.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\keyboard.c">
+    <ClCompile Include="libs\libvterm-mirror\src\keyboard.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\mouse.c">
+    <ClCompile Include="libs\libvterm-mirror\src\mouse.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\parser.c">
+    <ClCompile Include="libs\libvterm-mirror\src\parser.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\pen.c">
+    <ClCompile Include="libs\libvterm-mirror\src\pen.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\screen.c">
+    <ClCompile Include="libs\libvterm-mirror\src\screen.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\state.c">
+    <ClCompile Include="libs\libvterm-mirror\src\state.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\unicode.c">
+    <ClCompile Include="libs\libvterm-mirror\src\unicode.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libs\libvterm-0.3.3\src\vterm.c">
+    <ClCompile Include="libs\libvterm-mirror\src\vterm.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="libs\log.c\src\log.c">
@@ -77,19 +77,19 @@
     <ClInclude Include="vterm-module.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="libs\libvterm-0.3.3\include\vterm.h">
+    <ClInclude Include="libs\libvterm-mirror\include\vterm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="libs\libvterm-0.3.3\include\vterm_keycodes.h">
+    <ClInclude Include="libs\libvterm-mirror\include\vterm_keycodes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="libs\libvterm-0.3.3\src\rect.h">
+    <ClInclude Include="libs\libvterm-mirror\src\rect.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="libs\libvterm-0.3.3\src\utf8.h">
+    <ClInclude Include="libs\libvterm-mirror\src\utf8.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="libs\libvterm-0.3.3\src\vterm_internal.h">
+    <ClInclude Include="libs\libvterm-mirror\src\vterm_internal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="libs\log.c\src\log.h">
@@ -100,13 +100,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="libs\libvterm-0.3.3\src\fullwidth.inc">
+    <None Include="libs\libvterm-mirror\src\fullwidth.inc">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="libs\libvterm-0.3.3\src\encoding\DECdrawing.inc">
+    <None Include="libs\libvterm-mirror\src\encoding\DECdrawing.inc">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="libs\libvterm-0.3.3\src\encoding\uk.inc">
+    <None Include="libs\libvterm-mirror\src\encoding\uk.inc">
       <Filter>Header Files</Filter>
     </None>
   </ItemGroup>

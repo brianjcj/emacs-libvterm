@@ -47,6 +47,7 @@ typedef struct LineInfo {
 
 typedef struct ScrollbackLine {
   size_t cols;
+  unsigned int    continuation:1;    /* Line is a flow continuation of the previous */
   LineInfo *info;
   VTermScreenCell cells[];
 } ScrollbackLine;
@@ -84,10 +85,8 @@ typedef struct Term {
   // it actually points to entries that are no longer in sb_buffer (because the
   // window height has increased) and must be deleted from the terminal buffer
   int sb_pending;
-  int sb_pending_by_height_decr;
   bool sb_clear_pending;
-  long linenum;
-  long linenum_added;
+  long sb_lines_in_emacs_buffer;
 
   int invalid_start, invalid_end; // invalid rows in libvterm screen
   bool is_invalidated;
@@ -116,7 +115,7 @@ typedef struct Term {
   int lines_len;
 
   int width, height;
-  int height_resize;
+  /* int height_resize; */
   bool resizing;
   bool disable_bold_font;
   bool disable_underline;
@@ -125,14 +124,16 @@ typedef struct Term {
 
   char *cmd_buffer;
 
+#ifndef _WIN32
   int pty_fd;
+#endif
 
   int on_altscreen;
 
-  #ifdef _WIN32
+#ifdef _WIN32
   HANDLE name_pipe_handle;
   wchar_t *win32_pipe_name;
-  #endif
+#endif
 
 } Term;
 
@@ -147,7 +148,7 @@ static emacs_value cell_rgb_color(emacs_env *env, Term *term,
 
 static int term_settermprop(VTermProp prop, VTermValue *val, void *user_data);
 
-static void term_redraw(Term *term, emacs_env *env);
+static void term_redraw(Term *term, emacs_env *env, bool resize);
 static void term_flush_output(Term *term, emacs_env *env);
 static void term_process_key(Term *term, emacs_env *env, unsigned char *key,
                              size_t len, VTermModifier modifier);

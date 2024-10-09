@@ -13,8 +13,13 @@
 #include <termios.h>
 #include <unistd.h>
 #endif
-#include <log.h>
 #include <vterm.h>
+
+#if defined (_DEBUG)
+#include <log.h>
+#else
+#define log_debug
+#endif
 
 static LineInfo *alloc_lineinfo() {
   LineInfo *info = malloc(sizeof(LineInfo));
@@ -32,8 +37,11 @@ void free_lineinfo(LineInfo *line) {
   }
   free(line);
 }
-static int term_sb_push(int cols, const VTermScreenCell *cells, void *data) {
+static int term_sb_push(int cols, const VTermScreenCell *cells,
+                        bool continuation, void *data) {
   Term *term = (Term *)data;
+
+  log_debug("term_sb_push: cols: %d, sb_current: %d", cols, term->sb_current);
 
   if (!term->sb_size) {
     return 0;
@@ -67,6 +75,7 @@ static int term_sb_push(int cols, const VTermScreenCell *cells, void *data) {
   if (!sbrow) {
     sbrow = malloc(sizeof(ScrollbackLine) + c * sizeof(sbrow->cells[0]));
     sbrow->cols = c;
+    sbrow->continuation = continuation;
     sbrow->info = NULL;
   }
   if (sbrow->info != NULL) {
@@ -103,11 +112,6 @@ static int term_sb_push(int cols, const VTermScreenCell *cells, void *data) {
 
   if (term->sb_pending < term->sb_size) {
     term->sb_pending++;
-    /* when window height decreased */
-    if (term->height_resize < 0 &&
-        term->sb_pending_by_height_decr < -term->height_resize) {
-      term->sb_pending_by_height_decr++;
-    }
   }
 
   memcpy(sbrow->cells, cells, c * sizeof(cells[0]));
@@ -121,6 +125,8 @@ static int term_sb_push(int cols, const VTermScreenCell *cells, void *data) {
 /// @param data   Term
 static int term_sb_pop(int cols, VTermScreenCell *cells, void *data) {
   Term *term = (Term *)data;
+
+  log_debug("term_sb_pop: cols: %d, sb_current: %d", cols, term->sb_current);
 
   if (!term->sb_current) {
     return 0;
@@ -181,7 +187,6 @@ static int term_sb_clear(void *data) {
   term->sb_clear_pending = true;
   term->sb_current = 0;
   term->sb_pending = 0;
-  term->sb_pending_by_height_decr = 0;
   invalidate_terminal(term, -1, -1);
 
   return 0;
@@ -299,6 +304,7 @@ static void goto_col(Term *term, emacs_env *env, int row, int end_col) {
 
 static void refresh_lines(Term *term, emacs_env *env, int start_row,
                           int end_row, int end_col) {
+  log_debug("refresh_lines: start_row: %d, end_row: %d", start_row, end_row);
   if (end_row < start_row) {
     return;
   }
@@ -325,7 +331,16 @@ static void refresh_lines(Term *term, emacs_env *env, int start_row,
 
     int newline = 0;
     int isprompt = 0;
-    for (j = 0; j < end_col; j++) {
+
+    int end_col_real = end_col;
+    if (i < 0) {
+      ScrollbackLine *sbrow = term->sb_buffer[-i - 1];
+      if (end_col_real < sbrow->cols) {
+        end_col_real = (int)sbrow->cols;
+      }
+    }
+
+    for (j = 0; j < end_col_real; j++) {
       fetch_cell(term, i, j, &cell);
       if (isprompt && length > 0) {
         emacs_value text = render_text(env, term, buffer, length, &lastCell);
@@ -333,7 +348,7 @@ static void refresh_lines(Term *term, emacs_env *env, int start_row,
         length = 0;
       }
 
-      isprompt = is_end_of_prompt(term, end_col, i, j);
+      isprompt = is_end_of_prompt(term, end_col_real, i, j);
       if (isprompt && length > 0) {
         insert(env, render_text(env, term, buffer, length, &lastCell));
         length = 0;
@@ -347,7 +362,7 @@ static void refresh_lines(Term *term, emacs_env *env, int start_row,
 
       lastCell = cell;
       if (cell.chars[0] == 0) {
-        if (is_eol(term, end_col, i, j)) {
+        if (is_eol(term, end_col_real, i, j)) {
           /* This cell is EOL if this and every cell to the right is black */
           PUSH_BUFFER('\n');
           newline = 1;
@@ -392,25 +407,37 @@ static void refresh_lines(Term *term, emacs_env *env, int start_row,
 
   return;
 }
+
+static void refresh_screen_for_resize(Term *term, emacs_env *env) {
+  log_debug("refresh_screen_for_resize");
+  goto_line(env, 0);
+  refresh_lines(term, env, 0, term->height, term->width);
+
+  term->invalid_start = INT_MAX;
+  term->invalid_end = -1;
+}
+
 // Refresh the screen (visible part of the buffer when the terminal is
 // focused) of a invalidated terminal
 static void refresh_screen(Term *term, emacs_env *env) {
+  log_debug("refresh_screen");
   // Term height may have decreased before `invalid_end` reflects it.
   term->invalid_end = MIN(term->invalid_end, term->height);
 
   if (term->invalid_end >= term->invalid_start) {
-    int startrow = -(term->height - term->invalid_start - term->linenum_added);
+    int startrow = -(term->height - term->invalid_start);
     /* startrow is negative,so we backward  -startrow lines from end of buffer
        then delete lines there.
      */
+
+    log_debug("refresh_screen: goto line: startrow: %d, height: %d, "
+              "sb_current: %d, invalid_start: %d, invalid_end: %d",
+              startrow, term->height, term->sb_current, term->invalid_start,
+              term->invalid_end);
     goto_line(env, startrow);
     delete_lines(env, startrow, term->invalid_end - term->invalid_start, true);
     refresh_lines(term, env, term->invalid_start, term->invalid_end,
                   term->width);
-
-    /* term->linenum_added is lines added  by window height increased */
-    term->linenum += term->linenum_added;
-    term->linenum_added = 0;
   }
 
   term->invalid_start = INT_MAX;
@@ -418,6 +445,8 @@ static void refresh_screen(Term *term, emacs_env *env) {
 }
 
 static int term_resize(int rows, int cols, void *user_data) {
+  log_debug("term_resize: rows: %d, cols: %d", rows, cols);
+
   /* can not use invalidate_terminal here */
   /* when the window height decreased, */
   /*  the value of term->invalid_end can't bigger than window height */
@@ -465,56 +494,55 @@ static int term_resize(int rows, int cols, void *user_data) {
   return 1;
 }
 
-// Refresh the scrollback of an invalidated terminal.
-static void refresh_scrollback(Term *term, emacs_env *env) {
-  int max_line_count = (int)term->sb_current + term->height;
-  int del_cnt = 0;
-  if (term->sb_clear_pending) {
-    del_cnt = term->linenum - term->height;
-    if (del_cnt > 0) {
-      delete_lines(env, 1, del_cnt, true);
-      term->linenum -= del_cnt;
-    }
-    term->sb_clear_pending = false;
-  }
+static void refresh_scrollback_for_resize(Term *term, emacs_env *env) {
+  log_debug(
+      "refresh_scrollback_for_resize: scoll line current: %d, sb_pending: %d",
+      term->sb_current, term->sb_pending);
+
   if (term->sb_pending > 0) {
-    // This means that either the window height has decreased or the screen
-    // became full and libvterm had to push all rows up. Convert the first
-    // pending scrollback row into a string and append it just above the visible
-    // section of the buffer
-
-    del_cnt = term->linenum - term->height - (int)term->sb_size +
-              term->sb_pending - term->sb_pending_by_height_decr;
-    if (del_cnt > 0) {
-      delete_lines(env, 1, del_cnt, true);
-      term->linenum -= del_cnt;
-    }
-
-    term->linenum += term->sb_pending;
-    del_cnt = term->linenum - max_line_count; /* extra lines at the bottom */
-    /* buf_index is negative,so we move to end of buffer,then backward
-       -buf_index lines. goto lines backward is effectively when
-       vterm-max-scrollback is a large number.
-     */
-    int buf_index = -(term->height + del_cnt);
-    goto_line(env, buf_index);
+    goto_line(env, 0);
     refresh_lines(term, env, -term->sb_pending, 0, term->width);
+    term->sb_lines_in_emacs_buffer += term->sb_pending;
+
+    if (term->sb_lines_in_emacs_buffer > term->sb_size) {
+      size_t del_cnt = term->sb_lines_in_emacs_buffer - term->sb_size;
+      delete_lines(env, 1, (int)del_cnt, true);
+      term->sb_lines_in_emacs_buffer = (long)term->sb_size;
+    }
 
     term->sb_pending = 0;
   }
 
-  // Remove extra lines at the bottom
-  del_cnt = term->linenum - max_line_count;
-  if (del_cnt > 0) {
-    term->linenum -= del_cnt;
-    /* -del_cnt is negative,so we delete_lines from end of buffer.
-       this line means: delete del_cnt count of lines at end of buffer.
-     */
-    delete_lines(env, -del_cnt, del_cnt, true);
+  /* TODO(brianjcj): pop line case for linux (delete the poped lines) */
+}
+
+// Refresh the scrollback of an invalidated terminal.
+static void refresh_scrollback(Term *term, emacs_env *env) {
+  log_debug("refresh_scrollback: scoll line current: %d", term->sb_current);
+  if (term->sb_pending > 0) {
+    int buf_index = -(term->height);
+    log_debug("scroll: buf_index: %d, term->height: %d, "
+              "pending: %d, sb_current: %d",
+              buf_index, term->height, term->sb_pending, term->sb_current);
+    goto_line(env, buf_index);
+    refresh_lines(term, env, -term->sb_pending, 0, term->width);
+    term->sb_lines_in_emacs_buffer += term->sb_pending;
+
+    if (term->sb_lines_in_emacs_buffer > term->sb_size) {
+      size_t del_cnt = term->sb_lines_in_emacs_buffer - term->sb_size;
+      delete_lines(env, 1, (int)del_cnt, true);
+      term->sb_lines_in_emacs_buffer = (long)term->sb_size;
+    }
+
+    term->sb_pending = 0;
   }
 
-  term->sb_pending_by_height_decr = 0;
-  term->height_resize = 0;
+  if (term->sb_clear_pending) {
+    delete_lines(env, 1, term->sb_lines_in_emacs_buffer, true);
+    term->sb_lines_in_emacs_buffer = 0;
+
+    term->sb_clear_pending = false;
+  }
 }
 
 static void adjust_topline(Term *term, emacs_env *env) {
@@ -614,16 +642,19 @@ static void term_redraw_cursor(Term *term, emacs_env *env) {
   }
 }
 
-static void term_redraw(Term *term, emacs_env *env) {
+static void term_redraw(Term *term, emacs_env *env, bool resize) {
+  log_debug("term_redraw: resize: %d", resize);
   term_redraw_cursor(term, env);
 
   if (term->is_invalidated) {
-    int oldlinenum = term->linenum;
-    refresh_scrollback(term, env);
-    refresh_screen(term, env);
-    term->linenum_added = term->linenum - oldlinenum;
+    if (resize) {
+      refresh_scrollback_for_resize(term, env);
+      refresh_screen_for_resize(term, env);
+    } else {
+      refresh_scrollback(term, env);
+      refresh_screen(term, env);
+    }
     adjust_topline(term, env);
-    term->linenum_added = 0;
   }
 
   if (term->title_changed) {
@@ -667,7 +698,7 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
     .movecursor = term_movecursor,
     .settermprop = term_settermprop,
     .resize = term_resize,
-    .sb_pushline = term_sb_push,
+    .sb_pushline4 = term_sb_push,
     .sb_popline = term_sb_pop,
 #if !defined(VTermSBClearNotExists)
     .sb_clear = term_sb_clear,
@@ -755,7 +786,7 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *user_data) {
     break;
   case VTERM_PROP_ALTSCREEN:
     term->on_altscreen = val->boolean;
-    log_info("on_altscreen: %d", val->boolean);
+    log_debug("on_altscreen: %d", val->boolean);
     invalidate_terminal(term, 0, term->height);
     break;
   case VTERM_PROP_MOUSE:
@@ -908,7 +939,7 @@ static void term_flush_output(Term *term, emacs_env *env) {
 static void term_clear_scrollback(Term *term, emacs_env *env) {
   term_sb_clear(term);
   vterm_screen_flush_damage(term->vts);
-  term_redraw(term, env);
+  term_redraw(term, env, false);
 }
 
 static void term_process_key(Term *term, emacs_env *env, unsigned char *key,
@@ -1091,9 +1122,6 @@ void term_finalize(void *object) {
 }
 
 static void term_set_conpty_size(Term *term, short rows, short cols) {
-  log_info("send pipe: rows: %d, cols: %d, pipe:%s", rows, cols,
-           term->win32_pipe_name);
-
   HANDLE hPipe;
   DWORD dwWritten;
 
@@ -1116,7 +1144,7 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
     ++ps;
     *ps = cols;
 
-    log_info("send pipe: rows: %d, cols: %d", rows, cols);
+    log_debug("send pipe: rows: %d, cols: %d", rows, cols);
 
     BOOL boo = WriteFile(hPipe, buf, 5, &dwWritten, NULL);
 
@@ -1127,9 +1155,9 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
                      NULL, en, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf,
                      (sizeof(buf) / sizeof(char)), NULL);
 
-      log_info("failed to write to pipe. error: %d, %s", en, buf);
+      log_debug("failed to write to pipe. error: %d, %s", en, buf);
     } else {
-      log_info("ok done write to pipe");
+      log_debug("ok done write to pipe");
     }
 
     // DisconnectNamedPipe(hPipe);
@@ -1142,7 +1170,7 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
                    NULL, en, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf,
                    (sizeof(buf) / sizeof(char)), NULL);
 
-    log_info("failed to open pipe. error: %d, %s", en, buf);
+    log_debug("failed to open pipe. error: %d, %s", en, buf);
   }
 }
 
@@ -1335,18 +1363,20 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
   vterm_screen_set_callbacks(term->vts, &vterm_screen_callbacks, term);
   vterm_screen_set_damage_merge(term->vts, VTERM_DAMAGE_SCROLL);
   vterm_screen_enable_altscreen(term->vts, true);
+  vterm_screen_enable_reflow(term->vts, true);
+  vterm_screen_set_with_conpty(term->vts, true);
+  vterm_screen_callbacks_has_pushline4(term->vts);
   term->sb_size = MIN(SB_MAX, sb_size);
   term->sb_current = 0;
   term->sb_pending = 0;
   term->sb_clear_pending = false;
-  term->sb_pending_by_height_decr = 0;
   term->sb_buffer = malloc(sizeof(ScrollbackLine *) * term->sb_size);
+  term->sb_lines_in_emacs_buffer = 0;
   term->invalid_start = 0;
   term->invalid_end = rows;
   term->is_invalidated = false;
   term->width = cols;
   term->height = rows;
-  term->height_resize = 0;
   term->disable_bold_font = disable_bold_font;
   term->disable_underline = disable_underline;
   term->disable_inverse_video = disable_inverse_video;
@@ -1355,11 +1385,11 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
   for (int i = 0; i < term->height; i++) {
     insert(env, newline);
   }
-  term->linenum = term->height;
-  term->linenum_added = 0;
   term->resizing = false;
 
+#ifndef _WIN32
   term->pty_fd = -1;
+#endif
 
   term->title = NULL;
   term->title_changed = false;
@@ -1396,7 +1426,7 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
   if (len > 0) {
     char *bytes = _alloca(len);
     env->copy_string_contents(env, args[8], bytes, &len);
-    log_info("pipe name: %s", bytes);
+    log_debug("pipe name: %s", bytes);
 
     wchar_t *out = malloc(len * sizeof(wchar_t));
 
@@ -1448,7 +1478,7 @@ emacs_value Fvterm_update(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
 emacs_value Fvterm_redraw(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
                           void *data) {
   Term *term = env->get_user_ptr(env, args[0]);
-  term_redraw(term, env);
+  term_redraw(term, env, false);
   return env->make_integer(env, 0);
 }
 
@@ -1479,21 +1509,26 @@ emacs_value Fvterm_set_size(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
   int rows = (int)env->extract_integer(env, args[1]);
   int cols = (int)env->extract_integer(env, args[2]);
 
+  log_debug("set size: rows:%d, cols:%d, height:%d, width:%d", rows, cols,
+            term->height, term->width);
+
   if (cols != term->width || rows != term->height) {
-    term->height_resize = rows - term->height;
-    if (rows > term->height) {
-      if (rows - term->height > term->sb_current) {
-        term->linenum_added = (long)(rows - term->height - term->sb_current);
-      }
-    }
+    int old_height = term->height;
+
+    /* erase the whole screen */
+    int startrow = -old_height;
+    goto_line(env, startrow);
+    delete_lines(env, startrow, old_height, true);
 
     term->resizing = true;
     vterm_set_size(term->vt, rows, cols);
     vterm_screen_flush_damage(term->vts);
 
+#ifdef _WIN32
     term_set_conpty_size(term, rows, cols);
+#endif
 
-    term_redraw(term, env);
+    term_redraw(term, env, true);
   }
 
   return Qnil;
@@ -1596,7 +1631,8 @@ emacs_value Fvterm_get_on_altscreen(emacs_env *env, ptrdiff_t nargs,
 }
 
 static emacs_value cell_rgb_color_debug(emacs_env *env, Term *term,
-                                        VTermScreenCell *cell, bool is_foreground) {
+                                        VTermScreenCell *cell,
+                                        bool is_foreground) {
   VTermColor *color = is_foreground ? &cell->fg : &cell->bg;
 
   int props_len = 0;
@@ -1614,23 +1650,23 @@ static emacs_value cell_rgb_color_debug(emacs_env *env, Term *term,
    * see C-h f vterm--get-color RET
    */
   if (VTERM_COLOR_IS_DEFAULT_FG(color) || VTERM_COLOR_IS_DEFAULT_BG(color)) {
-    log_info("color is default fg/bg");
+    log_debug("color is default fg/bg");
     return vterm_get_color(env, -1, args);
   }
   if (VTERM_COLOR_IS_INDEXED(color)) {
     if (color->indexed.idx < 16) {
-      log_info("color idx: %d", color->indexed.idx);
+      log_debug("color idx: %d", color->indexed.idx);
       return vterm_get_color(env, color->indexed.idx, args);
     } else {
       VTermState *state = vterm_obtain_state(term->vt);
       vterm_state_get_palette_color(state, color->indexed.idx, color);
-      log_info("color idx in palette: %d, color:#%02X%02X%02X",
-               color->indexed.idx, color->rgb.red, color->rgb.green,
-               color->rgb.blue);
+      log_debug("color idx in palette: %d, color:#%02X%02X%02X",
+                color->indexed.idx, color->rgb.red, color->rgb.green,
+                color->rgb.blue);
     }
   } else if (VTERM_COLOR_IS_RGB(color)) {
-    log_info("rgb color: #%02X%02X%02X", color->rgb.red, color->rgb.green,
-             color->rgb.blue);
+    log_debug("rgb color: #%02X%02X%02X", color->rgb.red, color->rgb.green,
+              color->rgb.blue);
     /* do nothing just use the argument color directly */
   }
 
@@ -1649,16 +1685,15 @@ emacs_value Fvterm_get_cell_info(emacs_env *env, ptrdiff_t nargs,
   VTermScreenCell cell;
   fetch_cell(term, row, col, &cell);
 
-  log_info("cell: rows=%d, cols=%d", row, col);
-  log_info("fg----");
+  log_debug("cell: rows=%d, cols=%d", row, col);
+  log_debug("fg----");
   cell_rgb_color_debug(env, term, &cell, true);
-  log_info("bg----");
+  log_debug("bg----");
   cell_rgb_color_debug(env, term, &cell, false);
-  log_info("text: %d(%c), len: %d", cell.chars[0], cell.chars[0], cell.width);
+  log_debug("text: %d(%c), len: %d", cell.chars[0], cell.chars[0], cell.width);
 
   return Qnil;
 }
-
 
 int emacs_module_init(struct emacs_runtime *ert) {
   emacs_env *env = ert->get_environment(ert);
@@ -1787,14 +1822,22 @@ int emacs_module_init(struct emacs_runtime *ert) {
                            "get on altscreen boolean", NULL);
   bind_function(env, "vterm--get-on-altscreen", fun);
 
-  fun = env->make_function(env, 3, 3, Fvterm_get_cell_info,
-                           "get cell info", NULL);
+  fun = env->make_function(env, 3, 3, Fvterm_get_cell_info, "get cell info",
+                           NULL);
   bind_function(env, "vterm--get-cell-info", fun);
 
   provide(env, "vterm-module");
 
-  /* FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a"); */
-  /* log_add_fp(fp, LOG_TRACE); */
+#if defined(_DEBUG)
+
+#ifdef _WIN32
+  FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a");
+#else
+  FILE *fp = fopen("/tmp/vterm_test.log", "a");
+#endif
+  log_add_fp(fp, LOG_TRACE);
+
+#endif
 
   return 0;
 }

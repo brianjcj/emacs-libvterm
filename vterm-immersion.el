@@ -158,13 +158,14 @@ mode or just execute some local emacs command). e.g,
   "mouse whell"
   (interactive (list last-input-event current-prefix-arg))
   (let ((button (mwheel-event-button event))
-        (button-no 4))
+        (button-no 4)
+        (mod (vterm-get-event-modifier event)))
     (pcase button
       ('wheel-up (setq button-no 4))
       ('wheel-down (setq button-no 5)))
     (let ((pos (posn-col-row (event-end event))))
-      (vterm--mouse-move vterm--term (cdr pos) (car pos) 0)
-      (vterm--mouse-button vterm--term button-no t 0))))
+      (vterm--mouse-move vterm--term (cdr pos) (car pos) mod)
+      (vterm--mouse-button vterm--term button-no t mod))))
 
 (defun vterm-get-mouse-num (event)
   (pcase event
@@ -189,6 +190,17 @@ mode or just execute some local emacs command). e.g,
      mouse-num)
     (t 1)))
 
+(defun vterm-get-event-modifier (event)
+  (let ((m (event-modifiers event))
+        (mod 0))
+    (when (memq 'control m)
+      (setq m (+ m 4)))
+    (when (memq 'meta m)
+      (setq m (+ m 2)))
+    (when (memq 'shift m)
+      (setq m (+ m 1)))
+    mod))
+
 (defun vterm-immersion-mouse-drag-region (event)
   ""
   (interactive "e")
@@ -208,17 +220,19 @@ mode or just execute some local emacs command). e.g,
   ;; (print (event-basic-type event))
   (let ((pos (posn-col-row (event-end event)))
         (mouse-num (vterm-get-mouse-num event))
+        (mod (vterm-get-event-modifier event))
         ev)
-    (vterm--mouse-move vterm--term (cdr pos) (car pos) 0)
-    (vterm--mouse-button vterm--term mouse-num t 0)
+    (vterm--mouse-move vterm--term (cdr pos) (car pos) mod)
+    (vterm--mouse-button vterm--term mouse-num t mod)
     (track-mouse
       (while
           (progn
             (setq ev (read--potential-mouse-event))
             (mouse-movement-p ev))
+        (setq mod (vterm-get-event-modifier ev))
         (let ((pos (posn-col-row (event-end ev))))
-          (vterm--mouse-move vterm--term (cdr pos) (car pos) 0))))
-    (vterm--mouse-button vterm--term mouse-num nil 0)))
+          (vterm--mouse-move vterm--term (cdr pos) (car pos) mod))))
+    (vterm--mouse-button vterm--term mouse-num nil mod)))
 
 (defun vterm-immersion-on-altscreen-change (on-altscreen)
   (when vterm-auto-immension-mode
