@@ -1,0 +1,6 @@
+[submodule "libs/log.c"]
+	path = libs/log.c
+	url = https://github.com/brianjcj/log.c.git
+[submodule "libs/libvterm-mirror"]
+	path = libs/libvterm-mirror
+	url = https://github.com/brianjcj/libvterm-mirror.git
