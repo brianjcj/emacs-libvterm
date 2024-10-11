@@ -98,7 +98,11 @@ static int term_sb_push(int cols, const VTermScreenCell *cells,
       if (lastline->directory != NULL) {
         size_t sz = 1 + strlen(lastline->directory);
         line->directory = malloc(sz);
+#ifdef _WIN32
         strcpy_s(line->directory, sz, lastline->directory);
+#else
+        strcpy(line->directory, lastline->directory);
+#endif
       }
       term->lines[term->lines_len - 1] = line;
     }
@@ -472,8 +476,13 @@ static int term_resize(int rows, int cols, void *user_data) {
           if (lastline->directory != NULL) {
             size_t sz = 1 + strlen(term->lines[term->lines_len - 1]->directory);
             line->directory = malloc(sz);
+#ifdef _WIN32
             strcpy_s(line->directory, sz,
                      term->lines[term->lines_len - 1]->directory);
+#else
+            strcpy(line->directory,
+                   term->lines[term->lines_len - 1]->directory);
+#endif
           }
           term->lines[i] = line;
         } else {
@@ -1128,6 +1137,7 @@ void term_finalize(void *object) {
   free(term);
 }
 
+#ifdef _WIN32
 static void term_set_conpty_size(Term *term, short rows, short cols) {
   HANDLE hPipe;
   DWORD dwWritten;
@@ -1177,6 +1187,7 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
     log_debug("failed to open pipe. error: %d, %s", en, buf);
   }
 }
+#endif
 
 static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
   if (subCmd == 'A') {
@@ -1188,7 +1199,11 @@ static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
     }
     size_t sz = strlen(buffer) + 1;
     term->directory = malloc(sz);
+#ifdef _WIN32
     strcpy_s(term->directory, sz, buffer);
+#else
+    strcpy(term->directory, buffer);
+#endif
     term->directory_changed = true;
 
     for (int i = term->cursor.row; i < term->lines_len; i++) {
@@ -1201,7 +1216,11 @@ static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
       }
       size_t sz = strlen(buffer) + 1;
       term->lines[i]->directory = malloc(sz);
+#ifdef _WIN32
       strcpy_s(term->lines[i]->directory, sz, buffer);
+#else
+      strcpy(term->lines[i]->directory, buffer);
+#endif
       if (i == term->cursor.row) {
         term->lines[i]->prompt_col = term->cursor.col;
       } else {
@@ -1216,7 +1235,11 @@ static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
     node->code_len = strlen(buffer);
     size_t sz = node->code_len + 1;
     node->code = malloc(sz);
+#ifdef _WIN32
     strcpy_s(node->code, sz, buffer);
+#else
+    strcpy(node->code, buffer);
+#endif
     node->next = NULL;
 
     *(term->elisp_code_p_insert) = node;

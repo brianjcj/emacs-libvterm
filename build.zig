@@ -37,9 +37,9 @@ pub fn build(b: *std.Build) void {
     libvterm.linkLibC();
     b.installArtifact(libvterm);
 
-    buildexe(b, "vterm-dump", "libs/libvterm-0.3.3/bin/vterm-dump.c", libvterm);
-    buildexe(b, "unterm", "libs/libvterm-0.3.3/bin/unterm.c", libvterm);
-    // buildexe(b, "vterm-ctrl", "libs/libvterm-0.3.3/bin/vterm-ctrl.c", libvterm); // this use some unix headers
+    // buildexe(b, "vterm-dump", "libs/libvterm-mirror/bin/vterm-dump.c", libvterm);
+    // buildexe(b, "unterm", "libs/libvterm-mirror/bin/unterm.c", libvterm);
+    // buildexe(b, "vterm-ctrl", "libs/libvterm-mirror/bin/vterm-ctrl.c", libvterm); // this use some unix headers
 
     const libvterm_module = b.addSharedLibrary(.{
         .name = "vterm-module",

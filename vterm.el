@@ -590,8 +590,8 @@ Only background is used."
   "Shell process of current term.")
 
 (when (is-ms-windows)
-(defvar-local vterm--win32-pipe-name nil
-  "Name of pipe."))
+  (defvar-local vterm--win32-pipe-name nil
+    "Name of pipe."))
 
 (defvar-local vterm--notified-on-altscreen nil)
 
@@ -819,7 +819,9 @@ Exceptions are defined by `vterm-keymap-exceptions'."
                                   vterm-disable-inverse-video
                                   vterm-ignore-blink-cursor
                                   vterm-set-bold-hightbright
-                                  vterm--win32-pipe-name))
+                                  (if (is-ms-windows)
+                                      vterm--win32-pipe-name
+                                    nil)))
     (setq buffer-read-only t)
     (setq-local scroll-conservatively 101)
     (setq-local scroll-margin 0)
