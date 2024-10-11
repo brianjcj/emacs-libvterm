@@ -1114,9 +1114,16 @@ void term_finalize(void *object) {
   free(term->lines);
   vterm_free(term->vt);
 
+#ifdef _WIN32
   if (term->win32_pipe_name) {
     free(term->win32_pipe_name);
   }
+
+  if (term->name_pipe_handle != NULL) {
+    DisconnectNamedPipe(term->name_pipe_handle);
+    CloseHandle(term->name_pipe_handle);
+  }
+#endif
 
   free(term);
 }
@@ -1159,9 +1166,6 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
     } else {
       log_debug("ok done write to pipe");
     }
-
-    // DisconnectNamedPipe(hPipe);
-    // CloseHandle(hPipe);
 
   } else {
     char buf[256];

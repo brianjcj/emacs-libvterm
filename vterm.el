@@ -194,7 +194,7 @@ conpty enabled"
   :type 'string
   :group 'vterm)
 
-(defcustom vterm-w32-shell "powershell.exe"
+(defcustom vterm-w32-shell "cmd.exe"
   "The ms windows shell that gets run in the vterm. e.g., cmd.exe,
 powershell.exe, pwsh.exe, ubuntu.exe(wsl)"
   :type 'string
