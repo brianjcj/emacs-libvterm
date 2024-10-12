@@ -15,7 +15,7 @@
 #endif
 #include <vterm.h>
 
-#if defined (_DEBUG)
+#if defined (_DEBUG) || !defined (NDEBUG)
 #include <log.h>
 #else
 #define log_debug
@@ -122,6 +122,22 @@ static int term_sb_push(int cols, const VTermScreenCell *cells,
 
   return 1;
 }
+
+static int term_sb_peek(int *cols, bool *continuation, void *data) {
+  Term *term = (Term *)data;
+
+  if (!term->sb_current) {
+    return 0;
+  }
+
+  ScrollbackLine *sbrow = term->sb_buffer[0];
+
+  *cols = (int)sbrow->cols;
+  *continuation = sbrow->continuation;
+
+  return 1;
+}
+
 /// Scrollback pop handler (from pangoterm).
 ///
 /// @param cols
@@ -136,9 +152,9 @@ static int term_sb_pop(int cols, VTermScreenCell *cells, void *data) {
     return 0;
   }
 
-  if (term->sb_pending) {
-    term->sb_pending--;
-  }
+  /* if (term->sb_pending) { */
+  term->sb_pending--;
+  /* } */
 
   ScrollbackLine *sbrow = term->sb_buffer[0];
   term->sb_current--;
@@ -518,11 +534,12 @@ static void refresh_scrollback_for_resize(Term *term, emacs_env *env) {
       delete_lines(env, 1, (int)del_cnt, true);
       term->sb_lines_in_emacs_buffer = (long)term->sb_size;
     }
-
+    term->sb_pending = 0;
+  } else if (term->sb_pending < 0) {
+    /* pop line case for linux (delete the poped lines) */
+    delete_lines(env, term->sb_pending, -term->sb_pending, true);
     term->sb_pending = 0;
   }
-
-  /* TODO(brianjcj): pop line case for linux (delete the poped lines) */
 }
 
 // Refresh the scrollback of an invalidated terminal.
@@ -709,6 +726,7 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
     .resize = term_resize,
     .sb_pushline4 = term_sb_push,
     .sb_popline = term_sb_pop,
+    .sb_peek = term_sb_peek,
 #if !defined(VTermSBClearNotExists)
     .sb_clear = term_sb_clear,
 #endif
@@ -1391,7 +1409,11 @@ emacs_value Fvterm_new(emacs_env *env, ptrdiff_t nargs, emacs_value args[],
   vterm_screen_set_damage_merge(term->vts, VTERM_DAMAGE_SCROLL);
   vterm_screen_enable_altscreen(term->vts, true);
   vterm_screen_enable_reflow(term->vts, true);
+#ifdef _WIN32
   vterm_screen_set_with_conpty(term->vts, true);
+#else
+  vterm_screen_set_with_conpty(term->vts, false);
+#endif
   vterm_screen_callbacks_has_pushline4(term->vts);
   term->sb_size = MIN(SB_MAX, sb_size);
   term->sb_current = 0;
