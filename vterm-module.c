@@ -81,30 +81,34 @@ static int term_sb_push(int cols, const VTermScreenCell *cells,
   if (sbrow->info != NULL) {
     free_lineinfo(sbrow->info);
   }
-  sbrow->info = term->lines[0];
-  memmove(term->lines, term->lines + 1,
-          sizeof(term->lines[0]) * (term->lines_len - 1));
-  if (term->resizing) {
-    /* pushed by window height decr */
-    if (term->lines[term->lines_len - 1] != NULL) {
-      /* do not need free here ,it is reused ,we just need set null */
-      term->lines[term->lines_len - 1] = NULL;
-    }
-    term->lines_len--;
-  } else {
-    LineInfo *lastline = term->lines[term->lines_len - 1];
-    if (lastline != NULL) {
-      LineInfo *line = alloc_lineinfo();
-      if (lastline->directory != NULL) {
-        size_t sz = 1 + strlen(lastline->directory);
-        line->directory = malloc(sz);
-#ifdef _WIN32
-        strcpy_s(line->directory, sz, lastline->directory);
-#else
-        strcpy(line->directory, lastline->directory);
-#endif
+  sbrow->info = NULL;
+  if (term->lines_len > 0) {
+    sbrow->info = term->lines[0];
+    memmove(term->lines, term->lines + 1,
+            sizeof(term->lines[0]) * (term->lines_len - 1));
+
+    if (term->resizing) {
+      /* pushed by window height decr */
+      if (term->lines[term->lines_len - 1] != NULL) {
+        /* do not need free here ,it is reused ,we just need set null */
+        term->lines[term->lines_len - 1] = NULL;
       }
-      term->lines[term->lines_len - 1] = line;
+      term->lines_len--;
+    } else {
+      LineInfo *lastline = term->lines[term->lines_len - 1];
+      if (lastline != NULL) {
+        LineInfo *line = alloc_lineinfo();
+        if (lastline->directory != NULL) {
+          size_t sz = 1 + strlen(lastline->directory);
+          line->directory = malloc(sz);
+#ifdef _WIN32
+          strcpy_s(line->directory, sz, lastline->directory);
+#else
+          strcpy(line->directory, lastline->directory);
+#endif
+        }
+        term->lines[term->lines_len - 1] = line;
+      }
     }
   }
 
@@ -368,11 +372,12 @@ static void refresh_lines(Term *term, emacs_env *env, int start_row,
         length = 0;
       }
 
-      isprompt = is_end_of_prompt(term, end_col_real, i, j);
-      if (isprompt && length > 0) {
-        insert(env, render_text(env, term, buffer, length, &lastCell));
-        length = 0;
-      }
+      /* TODO: brianjcj */
+      /* isprompt = is_end_of_prompt(term, end_col_real, i, j); */
+      /* if (isprompt && length > 0) { */
+      /*   insert(env, render_text(env, term, buffer, length, &lastCell)); */
+      /*   length = 0; */
+      /* } */
 
       if (!compare_cells(&cell, &lastCell)) {
         emacs_value text = render_text(env, term, buffer, length, &lastCell);
@@ -1209,6 +1214,9 @@ static void term_set_conpty_size(Term *term, short rows, short cols) {
 
 static int handle_osc_cmd_51(Term *term, char subCmd, char *buffer) {
   if (subCmd == 'A') {
+    /* TODO: need to handle reflow */
+    return 0;
+
     /* "51;A" sets the current directory */
     /* "51;A" has also the role of identifying the end of the prompt */
     if (term->directory != NULL) {
