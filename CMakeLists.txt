@@ -62,6 +62,10 @@ set_property(TARGET vterm PROPERTY POSITION_INDEPENDENT_CODE ON)
 # Link with libvterm
 target_link_libraries(vterm-module PUBLIC vterm)
 
+
+target_compile_options(vterm-module PRIVATE -ggdb)
+target_compile_options(vterm PRIVATE -ggdb)
+
 # Custom run command for testing
 add_custom_target(run
   COMMAND emacs -Q -L ${CMAKE_SOURCE_DIR} -L ${CMAKE_BINARY_DIR} --eval "\\(require \\'vterm\\)" --eval "\\(vterm\\)"

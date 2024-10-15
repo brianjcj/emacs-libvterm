@@ -594,7 +594,7 @@ static void adjust_topline(Term *term, emacs_env *env) {
 
       /* recenter:If ARG is negative, it counts up from the bottom of the
        * window.  (ARG should be less than the height of the window ) */
-      if (term->height - pos.row <= win_body_height) {
+      if (term->height - pos.row < win_body_height) {
         recenter(env, env->make_integer(env, pos.row - term->height));
       } else {
         recenter(env, env->make_integer(env, pos.row));
@@ -1877,7 +1877,7 @@ int emacs_module_init(struct emacs_runtime *ert) {
 
   provide(env, "vterm-module");
 
-#if defined(_DEBUG)
+#if defined (_DEBUG) || !defined (NDEBUG)
 
 #ifdef _WIN32
   FILE *fp = fopen("C:\\Users\\JOYY\\vterm_test.log", "a");
