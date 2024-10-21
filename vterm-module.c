@@ -127,7 +127,7 @@ static int term_sb_push(int cols, const VTermScreenCell *cells,
   return 1;
 }
 
-static int term_sb_peek(int *cols, bool *continuation, void *data) {
+static int term_sb_peek(int *cols, const VTermScreenCell **cells, bool *continuation, void *data) {
   Term *term = (Term *)data;
 
   if (!term->sb_current) {
@@ -138,6 +138,7 @@ static int term_sb_peek(int *cols, bool *continuation, void *data) {
 
   *cols = (int)sbrow->cols;
   *continuation = sbrow->continuation;
+  *cells = sbrow->cells;
 
   return 1;
 }
@@ -166,17 +167,19 @@ static int term_sb_pop(int cols, VTermScreenCell *cells, void *data) {
   memmove(term->sb_buffer, term->sb_buffer + 1,
           sizeof(term->sb_buffer[0]) * (term->sb_current));
 
-  size_t cols_to_copy = (size_t)cols;
-  if (cols_to_copy > sbrow->cols) {
-    cols_to_copy = sbrow->cols;
-  }
+  if (cells != NULL) {
+    size_t cols_to_copy = (size_t)cols;
+    if (cols_to_copy > sbrow->cols) {
+      cols_to_copy = sbrow->cols;
+    }
 
-  // copy to vterm state
-  memcpy(cells, sbrow->cells, sizeof(cells[0]) * cols_to_copy);
-  size_t col;
-  for (col = cols_to_copy; col < (size_t)cols; col++) {
-    cells[col].chars[0] = 0;
-    cells[col].width = 1;
+    // copy to vterm state
+    memcpy(cells, sbrow->cells, sizeof(cells[0]) * cols_to_copy);
+    size_t col;
+    for (col = cols_to_copy; col < (size_t)cols; col++) {
+      cells[col].chars[0] = 0;
+      cells[col].width = 1;
+    }
   }
 
   LineInfo **lines = malloc(sizeof(LineInfo *) * (term->lines_len + 1));
