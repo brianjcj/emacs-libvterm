@@ -81,6 +81,8 @@ after entering alt-screen, and turn off after leaving alt-screen."
     (define-key map [down-mouse-3]              #'vterm-immersion-mouse-down-3)
     (define-key map [wheel-up]                  #'vterm-immersion-mwheel-scroll)
     (define-key map [wheel-down]                #'vterm-immersion-mwheel-scroll)
+    (define-key map [mouse-4]                   #'vterm-immersion-mwheel-scroll)
+    (define-key map [mouse-5]                   #'vterm-immersion-mwheel-scroll)
     (define-key map (kbd "C-SPC")               #'vterm--self-insert)
     (define-key map (kbd "S-SPC")               #'vterm-send-space)
     (define-key map (kbd "C-_")                 #'vterm--self-insert)
@@ -140,11 +142,9 @@ mode or just execute some local emacs command). e.g,
   (setq vterm-immersion-go-when-copy-mode-off t)
   (vterm-copy-mode))
 
-;; TODO: find a better name
-(defun vterm-read-and-send-command(cmd)
-  (interactive "scmd: ")
-  (message cmd)
-  (vterm-insert cmd))
+(defun vterm-read-and-send-text(text)
+  (interactive "stext: ")
+  (vterm-insert text))
 
 ;; mouse support
 (defun vterm-immersion-mwheel-scroll (event &optional arg)
@@ -162,7 +162,9 @@ mode or just execute some local emacs command). e.g,
         (mod (vterm-get-event-modifier event)))
     (pcase button
       ('wheel-up (setq button-no 4))
-      ('wheel-down (setq button-no 5)))
+      ('wheel-down (setq button-no 5))
+      ('mouse-4 (setq button-no 4))
+      ('mouse-5 (setq button-no 5)))
     (let ((pos (posn-col-row (event-end event))))
       (vterm--mouse-move vterm--term (cdr pos) (car pos) mod)
       (vterm--mouse-button vterm--term button-no t mod))))
@@ -240,10 +242,35 @@ mode or just execute some local emacs command). e.g,
 
 (add-hook 'vterm-on-altscreen-changed-hook 'vterm-immersion-on-altscreen-change)
 
+(transient-define-prefix vterm-transient ()
+  "vterm transient"
+  [["vterm transient"
+    ("i" "toggle immersion" vterm-immersion-mode)
+    ("b" "switch to buffer" switch-to-buffer)
+    ("t" "switch to tab" tab-bar-switch-to-tab)
+    ("s" "read and send text" vterm-read-and-send-text)
+    ("<f1>" "f1" vterm--self-insert)
+    ]])
+
+(transient-define-prefix vterm-transient-global ()
+  "vterm transient global"
+  [["vterm transient global"
+    ("i" "toggle immersion" vterm-immersion-mode)
+    ("b" "switch to buffer" switch-to-buffer)
+    ("t" "switch to tab" tab-bar-switch-to-tab)
+    ("<f1>" "f1" self-insert-command)
+    ]])
+
+
 (defun vterm-immersion-default-setup()
   ;; (define-key vterm-immersion-mode-map (kbd "<f12>") #'switch-to-buffer)
-  ;; (define-key vterm-immersion-mode-map (kbd "C-<f12>") #'vterm-immersion-mode)
-  ;; (define-key vterm-mode-map (kbd "C-<f12>") #'vterm-immersion-mode)
+
+  (define-key vterm-immersion-mode-map (kbd "C-<f12>") #'vterm-immersion-mode)
+  (define-key vterm-mode-map (kbd "C-<f12>") #'vterm-immersion-mode)
+
+  (define-key vterm-immersion-mode-map (kbd "<f1>") #'vterm-transient)
+  (define-key vterm-mode-map (kbd "<f1>") #'vterm-transient)
+  (global-set-key (kbd "<f1>") #'vterm-transient-global)
 
   (define-key vterm-immersion-mode-map (kbd "C-S-b") #'switch-to-buffer)
   (global-set-key (kbd "C-S-b") #'switch-to-buffer)
@@ -264,8 +291,8 @@ mode or just execute some local emacs command). e.g,
   (define-key vterm-copy-mode-map (kbd "C-S-t") #'vterm-copy-mode)
   (define-key vterm-mode-map (kbd "C-S-t") #'vterm-copy-mode)
 
-  (define-key vterm-mode-map (kbd "M-?") #'vterm-read-and-send-command)
-  (define-key vterm-immersion-mode-map (kbd "M-?") #'vterm-read-and-send-command)
+  (define-key vterm-mode-map (kbd "M-?") #'vterm-read-and-send-text)
+  (define-key vterm-immersion-mode-map (kbd "M-?") #'vterm-read-and-send-text)
 
   (define-key vterm-mode-map (kbd "M-:") #'eval-expression)
   )

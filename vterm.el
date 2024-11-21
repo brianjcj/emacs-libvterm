@@ -675,7 +675,10 @@ Exceptions are defined by `vterm-keymap-exceptions'."
         (unless (member (key-description key "\e") exceptions)
           (define-key esc-map key 'vterm--self-insert-meta)))
       (setq i (1+ i)))
-    (define-key map "\e" esc-map)))
+    (define-key esc-map "\e" 'vterm--self-insert)
+    (define-key map "\e" esc-map)
+    ;; (define-key map "\e" 'vterm--self-insert)
+    ))
 
 (defun vterm-xterm-paste (event)
   "Handle xterm paste EVENT in vterm."
