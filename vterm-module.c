@@ -219,6 +219,209 @@ static int term_sb_clear(void *data) {
   return 0;
 }
 
+/* How many cells are non-blank
+ * Returns the position of the first blank cell in the trailing blank end */
+static int sb_row_popcount(const ScrollbackLine *line)
+{
+  int col = line->cols - 1;
+  while(col >= 0 && line->cells[col].chars[0] == 0)
+    col--;
+  if (line->cells[col].width == 2)
+    col++;
+  return col + 1;
+}
+
+// old row index and out index is descease!  e.g, 3,2,1,0
+static void reflow_line(ScrollbackLine **old_buffer,
+                        int old_row_start, int old_row_end,  // e.g, 3 -> 1
+                        int new_cols,
+                        VTermPos *out_rect,
+                        ScrollbackLine **out_buffer, int skip_rows,
+                        // the first really output row. not count the skip rows
+                        int first_out_row_index
+                        ) {
+  int new_row_index = 0;  // increase, 0, 1, 2, 3
+  int old_row_index = old_row_start;
+
+  // get first old line
+  int old_row_cell_count = sb_row_popcount(old_buffer[old_row_index]);
+  int old_row_taken = 0;
+  int new_row_filled = 0;
+
+  while (1) {
+    int new_row_need_cells = new_cols - new_row_filled;
+    int old_row_have = old_row_cell_count - old_row_taken;
+
+    if (old_row_have <= new_row_need_cells) {
+
+      // consume all (remain) cells in current old row
+
+      if (out_buffer != NULL && new_row_index >= skip_rows) {
+        ScrollbackLine *new_sbrow;
+        int effect_out_row_index = first_out_row_index - new_row_index + skip_rows;
+        if (new_row_filled == 0) {
+          new_sbrow= malloc(sizeof(ScrollbackLine) + new_cols * sizeof(new_sbrow->cells[0]));
+          new_sbrow->cols = new_cols;
+          new_sbrow->continuation = (new_row_index != 0);
+          new_sbrow->info = NULL;
+          out_buffer[effect_out_row_index] = new_sbrow;
+        } else {
+          new_sbrow = out_buffer[effect_out_row_index];
+        }
+
+        memcpy(&new_sbrow->cells[new_row_filled],
+               &old_buffer[old_row_index]->cells[old_row_taken],
+               old_row_have * sizeof(VTermScreenCell));
+      }
+
+      // current new row still has room
+      // next old row
+
+      new_row_filled += old_row_have;
+
+      old_row_index--;
+      old_row_taken = 0;
+
+      if (old_row_index < old_row_end)
+        break;
+
+      if (old_row_have == new_row_need_cells) {
+        // no space left in new row too.
+        // happy! next row together!
+        new_row_index++;
+        new_row_filled = 0;
+      }
+
+      old_row_cell_count = sb_row_popcount(old_buffer[old_row_index]);
+
+    } else {
+      // old row > new_row_need_cells
+      // fill all the current new row and go next new row.
+      // consume just partial of current old row.
+
+      if (out_buffer != NULL && new_row_index >= skip_rows) {
+
+        ScrollbackLine *new_sbrow;
+        int effect_out_row_index = first_out_row_index - new_row_index + skip_rows;
+        if (new_row_filled == 0) {
+          new_sbrow = malloc(sizeof(ScrollbackLine) + new_cols * sizeof(new_sbrow->cells[0]));
+          new_sbrow->cols = new_cols;
+          new_sbrow->continuation = (new_row_index != 0);
+          new_sbrow->info = NULL;
+          out_buffer[effect_out_row_index] = new_sbrow;
+        } else {
+          new_sbrow = out_buffer[effect_out_row_index];
+        }
+
+        memcpy(&new_sbrow->cells[new_row_filled],
+               &old_buffer[old_row_index]->cells[old_row_taken],
+               new_row_need_cells * sizeof(VTermScreenCell));
+      }
+
+      old_row_taken += new_row_need_cells;
+
+
+      if (old_buffer[old_row_index]->cells[old_row_taken - 1].width == 2) {
+        // width > 1. don't break it
+        old_row_taken--;
+        if (out_buffer != NULL && new_row_index >= skip_rows) {
+          int effect_out_row_index = first_out_row_index - new_row_index + skip_rows;
+          out_buffer[effect_out_row_index]->cells[new_cols - 1].chars[0] = 0;
+        }
+      }
+
+      // next new row
+      new_row_index++;
+      new_row_filled = 0;
+    }
+  }
+
+  out_rect->col = new_row_filled - 1;  // maybe -1
+  out_rect->row = new_row_index;
+  if (new_row_filled > 0) {
+    if (out_buffer != NULL && new_row_index >= skip_rows) {
+      int effect_out_row_index = first_out_row_index - new_row_index + skip_rows;
+      out_buffer[effect_out_row_index]->cols = new_row_filled;
+    }
+  }
+}
+
+static void term_sb_reflow(Term *term) {
+  if (term->sb_current == 0)
+    return;
+
+  int cols = term->width;
+
+  ScrollbackLine **new_sb_buffer = malloc(sizeof(ScrollbackLine *) * term->sb_size);
+
+  size_t new_sb_index = 0;
+  size_t old_line_start_row_index = 0;
+  size_t old_line_end_row_index = 0;
+  size_t old_row_index = 0;
+
+  while (1) {
+    old_line_end_row_index = old_row_index;
+    ScrollbackLine *old_sbrow = term->sb_buffer[old_row_index];
+    while (term->sb_buffer[old_row_index]->continuation && old_row_index < term->sb_current - 1) {
+      old_row_index++;
+    }
+    old_line_start_row_index = old_row_index;
+
+    old_sbrow = term->sb_buffer[old_row_index];
+    if ((old_line_start_row_index == old_line_end_row_index) && old_sbrow->cols <= cols) {
+      // fast path
+      new_sb_buffer[new_sb_index] = old_sbrow;
+      term->sb_buffer[old_row_index] = NULL;
+      new_sb_index++;
+    } else {
+      VTermPos out_rect;
+      reflow_line(term->sb_buffer, old_line_start_row_index, old_line_end_row_index,
+                  cols, &out_rect, NULL, 0, 0);
+
+      int out_line = out_rect.row + 1;
+      int new_line_start_row_index = new_sb_index + out_line - 1;
+
+      int skip_rows = 0;
+
+      if (new_line_start_row_index > (term->sb_size - 1)) {
+        skip_rows = new_line_start_row_index - (term->sb_size - 1);
+      }
+
+      reflow_line(term->sb_buffer, old_line_start_row_index, old_line_end_row_index,
+                  cols, &out_rect, new_sb_buffer, skip_rows,
+                  new_line_start_row_index - skip_rows);
+
+      new_sb_index = new_line_start_row_index + 1;
+
+      if (skip_rows > 0) {
+        new_sb_index -= skip_rows;
+        break;
+      }
+
+    }
+
+    // next line
+    old_row_index++;
+
+    if (old_row_index >= term->sb_current)
+      break;
+  }
+
+  // free the old sb buffer
+  for (int i = 0; i < term->sb_current; i++) {
+    if (term->sb_buffer[i] == NULL)
+      continue;
+    if (term->sb_buffer[i]->info != NULL) {
+      free_lineinfo(term->sb_buffer[i]->info);
+      term->sb_buffer[i]->info = NULL;
+    }
+    free(term->sb_buffer[i]);
+  }
+
+  term->sb_buffer = new_sb_buffer;
+  term->sb_current = new_sb_index;
+}
+
 static int row_to_linenr(Term *term, int row) {
   return row != INT_MAX ? row + (int)term->sb_current + 1 : INT_MAX;
 }
@@ -546,6 +749,7 @@ static void refresh_scrollback_for_resize(Term *term, emacs_env *env) {
   } else if (term->sb_pending < 0) {
     /* pop line case for linux (delete the poped lines) */
     delete_lines(env, term->sb_pending, -term->sb_pending, true);
+    term->sb_lines_in_emacs_buffer += term->sb_pending;
     term->sb_pending = 0;
   }
 }
@@ -1690,6 +1894,25 @@ emacs_value Fvterm_get_on_altscreen(emacs_env *env, ptrdiff_t nargs,
   return term->on_altscreen == 0 ? Qnil : Qt;
 }
 
+emacs_value Fvterm_reflow_sb(emacs_env *env, ptrdiff_t nargs,
+                             emacs_value args[], void *data) {
+  Term *term = env->get_user_ptr(env, args[0]);
+
+  delete_lines(env, 1, term->sb_lines_in_emacs_buffer, true);
+
+  term_sb_reflow(term);
+
+  int buf_index = -(term->height);
+  goto_line(env, buf_index);
+  refresh_lines(term, env, -term->sb_current, 0, term->width);
+
+  term->sb_lines_in_emacs_buffer = term->sb_current;
+
+  return Qnil;
+}
+
+
+
 static emacs_value cell_rgb_color_debug(emacs_env *env, Term *term,
                                         VTermScreenCell *cell,
                                         bool is_foreground) {
@@ -1885,6 +2108,11 @@ int emacs_module_init(struct emacs_runtime *ert) {
   fun = env->make_function(env, 3, 3, Fvterm_get_cell_info, "get cell info",
                            NULL);
   bind_function(env, "vterm--get-cell-info", fun);
+
+  fun = env->make_function(env, 1, 1, Fvterm_reflow_sb,
+                           "reflow scroll history", NULL);
+  bind_function(env, "vterm--reflow-sb", fun);
+
 
   provide(env, "vterm-module");
 

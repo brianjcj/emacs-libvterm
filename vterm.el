@@ -170,6 +170,7 @@ the executable."
 (declare-function vterm--mouse-button "vterm-module")
 (declare-function vterm--get-on-altscreen "vterm-module")
 (declare-function vterm--get-cell-info "vterm-module")
+(declare-function vterm--reflow-sb "vterm-module")
 
 (require 'subr-x)
 (require 'find-func)
@@ -1327,6 +1328,13 @@ The return value is `t' when point moved successfully."
     (read-string "name: " nil nil "*vterm*")))
   (let ((vterm-w32-shell w32shell))
     (vterm name)))
+
+(defun vterm-reflow-sb()
+  (interactive)
+  (save-excursion
+    (let ((inhibit-redisplay t)
+          (inhibit-read-only t))
+      (vterm--reflow-sb vterm--term))))
 
 ;;; Internal
 

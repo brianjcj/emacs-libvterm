@@ -195,6 +195,9 @@ emacs_value Fvterm_get_on_altscreen(emacs_env *env, ptrdiff_t nargs,
 emacs_value Fvterm_get_cell_info(emacs_env *env, ptrdiff_t nargs,
                                  emacs_value args[], void *data);
 
+emacs_value Fvterm_reflow_sb(emacs_env *env, ptrdiff_t nargs,
+                             emacs_value args[], void *data);
+
 VTERM_EXPORT int emacs_module_init(struct emacs_runtime *ert);
 
 #endif /* VTERM_MODULE_H */
