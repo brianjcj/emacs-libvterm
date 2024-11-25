@@ -249,7 +249,6 @@ mode or just execute some local emacs command). e.g,
     ("b" "switch to buffer" switch-to-buffer)
     ("t" "switch to tab" tab-bar-switch-to-tab)
     ("s" "read and send text" vterm-read-and-send-text)
-    ("r" "reflow scroll history" vterm-reflow-sb)
     ("<f1>" "f1" vterm--self-insert)
     ]])
 

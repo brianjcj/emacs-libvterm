@@ -232,14 +232,14 @@ static int sb_row_popcount(const ScrollbackLine *line)
 }
 
 // old row index and out index is descease!  e.g, 3,2,1,0
-static void reflow_line(ScrollbackLine **old_buffer,
-                        int old_row_start, int old_row_end,  // e.g, 3 -> 1
-                        int new_cols,
-                        VTermPos *out_rect,
-                        ScrollbackLine **out_buffer, int skip_rows,
-                        // the first really output row. not count the skip rows
-                        int first_out_row_index
-                        ) {
+static void reflow_sb_line(ScrollbackLine **old_buffer,
+                           int old_row_start, int old_row_end,  // e.g, 3 -> 1
+                           int new_cols,
+                           VTermPos *out_rect,
+                           ScrollbackLine **out_buffer, int skip_rows,
+                           // the first really output row. not count the skip rows
+                           int first_out_row_index
+                           ) {
   int new_row_index = 0;  // increase, 0, 1, 2, 3
   int old_row_index = old_row_start;
 
@@ -375,8 +375,8 @@ static void term_sb_reflow(Term *term) {
       new_sb_index++;
     } else {
       VTermPos out_rect;
-      reflow_line(term->sb_buffer, old_line_start_row_index, old_line_end_row_index,
-                  cols, &out_rect, NULL, 0, 0);
+      reflow_sb_line(term->sb_buffer, old_line_start_row_index, old_line_end_row_index,
+                     cols, &out_rect, NULL, 0, 0);
 
       int out_line = out_rect.row + 1;
       int new_line_start_row_index = new_sb_index + out_line - 1;
@@ -387,9 +387,9 @@ static void term_sb_reflow(Term *term) {
         skip_rows = new_line_start_row_index - (term->sb_size - 1);
       }
 
-      reflow_line(term->sb_buffer, old_line_start_row_index, old_line_end_row_index,
-                  cols, &out_rect, new_sb_buffer, skip_rows,
-                  new_line_start_row_index - skip_rows);
+      reflow_sb_line(term->sb_buffer, old_line_start_row_index, old_line_end_row_index,
+                     cols, &out_rect, new_sb_buffer, skip_rows,
+                     new_line_start_row_index - skip_rows);
 
       new_sb_index = new_line_start_row_index + 1;
 

@@ -993,6 +993,14 @@ Optional argument RESET clears all the errors."
       (vterm--reinsert-fake-newlines)))
   (vterm-reset-cursor-point)
   (use-local-map vterm-mode-map)
+
+  (let ((size (funcall
+               (or (process-get vterm--process 'adjust-window-size-function)
+                   window-adjust-process-window-size-function)
+               vterm--process (get-buffer-window-list))))
+    (when size
+      (set-process-window-size vterm--process (cdr size) (car size))))
+
   (vterm-send-start))
 
 (define-minor-mode vterm-copy-mode
@@ -1329,6 +1337,8 @@ The return value is `t' when point moved successfully."
   (let ((vterm-w32-shell w32shell))
     (vterm name)))
 
+;; it is not neccessary to reflow the scroll history.
+;; i have just fount that fake newline functionality do the same job and better.
 (defun vterm-reflow-sb()
   (interactive)
   (save-excursion
