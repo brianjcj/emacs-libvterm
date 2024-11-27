@@ -190,7 +190,7 @@ mode or just execute some local emacs command). e.g,
          (and (let 'wheel-left (event-basic-type mouse))
               (let mouse-num 7)))
      mouse-num)
-    (t 1)))
+    (_ 1)))
 
 (defun vterm-get-event-modifier (event)
   (let ((m (event-modifiers event))
